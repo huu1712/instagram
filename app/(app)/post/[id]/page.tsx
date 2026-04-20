@@ -15,10 +15,10 @@ export default async function PostDetailPage({
   const userId = await getSessionUserId();
   if (!userId) redirect("/login");
 
-  const post = findPostById(id);
+  const post = await findPostById(id);
   if (!post) redirect("/");
 
-  const author = findUserById(post.userId);
+  const author = await findUserById(post.userId);
   const authorName = author?.displayName ?? "Ẩn danh";
   const authorAvatar = author?.avatarUrl ?? null;
   const isOwner = post.userId === userId;

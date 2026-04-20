@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { Pool } from "pg";
 
 export type User = {
   id: string;
@@ -33,120 +34,182 @@ export type Post = {
   createdAt: string;
 };
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const USERS_FILE = path.join(DATA_DIR, "users.json");
-const POSTS_FILE = path.join(DATA_DIR, "posts.json");
-
-function ensureDataDir() {
-  try {
-    if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
-  } catch {
-    // Vercel runtime filesystem is read-only; ignore to avoid crashing.
+export class DataStoreWriteError extends Error {
+  constructor(message = "Không thể lưu dữ liệu vào Postgres. Kiểm tra biến môi trường DATABASE_URL.") {
+    super(message);
+    this.name = "DataStoreWriteError";
   }
 }
 
-function readJsonFile<T>(file: string, fallback: T): T {
-  try {
-    if (!existsSync(file)) return fallback;
-    return JSON.parse(readFileSync(file, "utf8")) as T;
-  } catch {
-    return fallback;
+let pool: Pool | null = null;
+let initPromise: Promise<void> | null = null;
+
+function getPool(): Pool {
+  if (pool) return pool;
+  const connectionString = process.env.DATABASE_URL;
+  if (!connectionString) {
+    throw new DataStoreWriteError("Thiếu DATABASE_URL. Hãy thêm biến môi trường Postgres trên local/Vercel.");
   }
+  pool = new Pool({
+    connectionString,
+    ssl:
+      process.env.NODE_ENV === "production"
+        ? {
+            rejectUnauthorized: false,
+          }
+        : undefined,
+  });
+  return pool;
 }
 
-function writeJsonFile(file: string, data: unknown) {
-  try {
-    ensureDataDir();
-    writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
-  } catch {
-    // Ignore write failure in immutable serverless FS.
+async function ensureSchema() {
+  if (!initPromise) {
+    initPromise = (async () => {
+      const db = getPool();
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS users (
+          id TEXT PRIMARY KEY,
+          username TEXT NOT NULL UNIQUE,
+          password_salt TEXT NOT NULL,
+          password_hash TEXT NOT NULL,
+          display_name TEXT NOT NULL,
+          avatar_url TEXT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+      `);
+      await db.query(`
+        CREATE TABLE IF NOT EXISTS posts (
+          id TEXT PRIMARY KEY,
+          user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+          media JSONB NOT NULL,
+          music JSONB NULL,
+          caption TEXT NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        );
+      `);
+      await db.query(`
+        CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
+      `);
+    })();
   }
+  await initPromise;
 }
 
-/** Chuẩn hoá bài cũ chỉ có `imageUrl` */
-function migrateRawPost(raw: Record<string, unknown>): Post {
-  const id = String(raw.id ?? "");
-  const userId = String(raw.userId ?? "");
-  const caption = String(raw.caption ?? "");
-  const createdAt = String(raw.createdAt ?? new Date().toISOString());
-  let music: PostMusic | null = null;
-  if (raw.music && typeof raw.music === "object") {
-    const m = raw.music as Record<string, unknown>;
-    if (typeof m.url === "string" && m.url.trim().length > 0) {
-      music = {
-        url: m.url,
-        title: typeof m.title === "string" && m.title.trim() ? m.title : "Nhạc nền",
-        artist: typeof m.artist === "string" ? m.artist : "",
-        provider: m.provider === "deezer" ? "deezer" : "upload",
-      };
-    }
-  } else if (raw.musicUrl != null) {
-    const musicUrl = String(raw.musicUrl);
-    if (musicUrl) {
-      music = {
-        url: musicUrl,
-        title: typeof raw.musicTitle === "string" && raw.musicTitle.trim() ? raw.musicTitle : "Nhạc nền",
-        artist: typeof raw.musicArtist === "string" ? raw.musicArtist : "",
-        provider: raw.musicProvider === "deezer" ? "deezer" : "upload",
-      };
-    }
-  }
-  const mediaRaw = raw.media;
-  if (Array.isArray(mediaRaw) && mediaRaw.length > 0) {
-    const media = mediaRaw
-      .map((m) => {
-        const o = m as Record<string, unknown>;
-        const url = String(o.url ?? "");
-        const kind = o.kind === "video" ? "video" : "image";
-        if (!url) return null;
-        return { url, kind } as PostMediaItem;
-      })
-      .filter(Boolean) as PostMediaItem[];
-    return { id, userId, caption, createdAt, media, music };
-  }
-  const imageUrl = raw.imageUrl != null ? String(raw.imageUrl) : "";
+function mapUserRow(row: Record<string, unknown>): User {
   return {
-    id,
-    userId,
-    caption,
-    createdAt,
-    media: imageUrl ? [{ url: imageUrl, kind: "image" as const }] : [],
-    music,
+    id: String(row.id),
+    username: String(row.username),
+    passwordSalt: String(row.password_salt),
+    passwordHash: String(row.password_hash),
+    displayName: String(row.display_name),
+    avatarUrl: row.avatar_url == null ? null : String(row.avatar_url),
+    createdAt: new Date(String(row.created_at)).toISOString(),
   };
 }
 
-export function getUsers(): User[] {
-  return readJsonFile<User[]>(USERS_FILE, []);
+function parseMedia(media: unknown): PostMediaItem[] {
+  if (!Array.isArray(media)) return [];
+  return media
+    .map((m) => {
+      const item = m as Record<string, unknown>;
+      if (typeof item?.url !== "string") return null;
+      return {
+        url: item.url,
+        kind: item.kind === "video" ? "video" : "image",
+      } as PostMediaItem;
+    })
+    .filter(Boolean) as PostMediaItem[];
 }
 
-export function saveUsers(users: User[]) {
-  writeJsonFile(USERS_FILE, users);
+function parseMusic(music: unknown): PostMusic | null {
+  if (!music || typeof music !== "object") return null;
+  const m = music as Record<string, unknown>;
+  if (typeof m.url !== "string" || !m.url) return null;
+  return {
+    url: m.url,
+    title: typeof m.title === "string" ? m.title : "Nhạc nền",
+    artist: typeof m.artist === "string" ? m.artist : "",
+    provider: m.provider === "deezer" ? "deezer" : "upload",
+  };
 }
 
-export function getPosts(): Post[] {
-  const raw = readJsonFile<Record<string, unknown>[]>(POSTS_FILE, []);
-  return raw.map((r) => migrateRawPost(r));
+function mapPostRow(row: Record<string, unknown>): Post {
+  return {
+    id: String(row.id),
+    userId: String(row.user_id),
+    media: parseMedia(row.media),
+    music: parseMusic(row.music),
+    caption: String(row.caption ?? ""),
+    createdAt: new Date(String(row.created_at)).toISOString(),
+  };
 }
 
-export function savePosts(posts: Post[]) {
-  writeJsonFile(POSTS_FILE, posts);
+export async function getUsers(): Promise<User[]> {
+  try {
+    await ensureSchema();
+    const db = getPool();
+    const result = await db.query("SELECT * FROM users ORDER BY created_at ASC");
+    return result.rows.map((row: unknown) => mapUserRow(row as Record<string, unknown>));
+  } catch {
+    return [];
+  }
 }
 
-export function findUserByUsername(username: string): User | undefined {
+export async function getPosts(): Promise<Post[]> {
+  try {
+    await ensureSchema();
+    const db = getPool();
+    const result = await db.query("SELECT * FROM posts ORDER BY created_at DESC");
+    return result.rows.map((row: unknown) => mapPostRow(row as Record<string, unknown>));
+  } catch {
+    return [];
+  }
+}
+
+export async function findUserByUsername(username: string): Promise<User | undefined> {
   const u = username.trim().toLowerCase();
-  return getUsers().find((x) => x.username.toLowerCase() === u);
+  try {
+    await ensureSchema();
+    const db = getPool();
+    const result = await db.query("SELECT * FROM users WHERE lower(username) = $1 LIMIT 1", [u]);
+    const row = result.rows[0];
+    return row ? mapUserRow(row as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
-export function findUserById(id: string): User | undefined {
-  return getUsers().find((x) => x.id === id);
+export async function findUserById(id: string): Promise<User | undefined> {
+  try {
+    await ensureSchema();
+    const db = getPool();
+    const result = await db.query("SELECT * FROM users WHERE id = $1 LIMIT 1", [id]);
+    const row = result.rows[0];
+    return row ? mapUserRow(row as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
-export function findPostById(id: string): Post | undefined {
-  return getPosts().find((p) => p.id === id);
+export async function findPostById(id: string): Promise<Post | undefined> {
+  try {
+    await ensureSchema();
+    const db = getPool();
+    const result = await db.query("SELECT * FROM posts WHERE id = $1 LIMIT 1", [id]);
+    const row = result.rows[0];
+    return row ? mapPostRow(row as Record<string, unknown>) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
-export function createUser(username: string, passwordSalt: string, passwordHash: string): User {
-  const users = getUsers();
+export async function createUser(
+  username: string,
+  passwordSalt: string,
+  passwordHash: string
+): Promise<User> {
+  await ensureSchema();
+  const db = getPool();
   const user: User = {
     id: randomUUID(),
     username: username.trim(),
@@ -156,22 +219,38 @@ export function createUser(username: string, passwordSalt: string, passwordHash:
     avatarUrl: null,
     createdAt: new Date().toISOString(),
   };
-  users.push(user);
-  saveUsers(users);
-  return user;
+  try {
+    await db.query(
+      `INSERT INTO users (id, username, password_salt, password_hash, display_name, avatar_url, created_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [user.id, user.username, user.passwordSalt, user.passwordHash, user.displayName, user.avatarUrl, user.createdAt]
+    );
+    return user;
+  } catch (error) {
+    throw new DataStoreWriteError(error instanceof Error ? error.message : undefined);
+  }
 }
 
-export function updateUserProfile(
+export async function updateUserProfile(
   userId: string,
   patch: { displayName?: string; avatarUrl?: string | null }
-): User | null {
-  const users = getUsers();
-  const idx = users.findIndex((x) => x.id === userId);
-  if (idx === -1) return null;
-  if (patch.displayName !== undefined) users[idx].displayName = patch.displayName.trim();
-  if (patch.avatarUrl !== undefined) users[idx].avatarUrl = patch.avatarUrl;
-  saveUsers(users);
-  return users[idx];
+): Promise<User | null> {
+  await ensureSchema();
+  const db = getPool();
+  try {
+    const result = await db.query(
+      `UPDATE users
+       SET display_name = COALESCE($2, display_name),
+           avatar_url = COALESCE($3, avatar_url)
+       WHERE id = $1
+       RETURNING *`,
+      [userId, patch.displayName?.trim() ?? null, patch.avatarUrl ?? null]
+    );
+    const row = result.rows[0];
+    return row ? mapUserRow(row as Record<string, unknown>) : null;
+  } catch (error) {
+    throw new DataStoreWriteError(error instanceof Error ? error.message : undefined);
+  }
 }
 
 export function deleteLocalUpload(url: string) {
@@ -186,13 +265,14 @@ export function deleteLocalUpload(url: string) {
   }
 }
 
-export function addPost(
+export async function addPost(
   userId: string,
   media: PostMediaItem[],
   caption: string,
   music: PostMusic | null
-): Post {
-  const posts = getPosts();
+): Promise<Post> {
+  await ensureSchema();
+  const db = getPool();
   const post: Post = {
     id: randomUUID(),
     userId,
@@ -201,54 +281,62 @@ export function addPost(
     caption: caption.trim(),
     createdAt: new Date().toISOString(),
   };
-  posts.unshift(post);
-  savePosts(posts);
-  return post;
+  try {
+    await db.query(
+      `INSERT INTO posts (id, user_id, media, music, caption, created_at)
+       VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6)`,
+      [post.id, post.userId, JSON.stringify(post.media), JSON.stringify(post.music), post.caption, post.createdAt]
+    );
+    return post;
+  } catch (error) {
+    throw new DataStoreWriteError(error instanceof Error ? error.message : undefined);
+  }
 }
 
-export function updatePost(
+export async function updatePost(
   userId: string,
   postId: string,
   next: { caption: string; media: PostMediaItem[]; music: PostMusic | null }
-): Post | null {
-  const posts = getPosts();
-  const idx = posts.findIndex((p) => p.id === postId);
-  if (idx === -1) return null;
-  if (posts[idx].userId !== userId) return null;
+): Promise<Post | null> {
+  await ensureSchema();
+  const db = getPool();
+  const current = await findPostById(postId);
+  if (!current || current.userId !== userId) return null;
 
-  const prevUrls = new Set(posts[idx].media.map((m) => m.url));
+  const prevUrls = new Set(current.media.map((m) => m.url));
   const nextUrls = new Set(next.media.map((m) => m.url));
   for (const url of prevUrls) {
     if (!nextUrls.has(url)) deleteLocalUpload(url);
   }
-  if (
-    posts[idx].music &&
-    posts[idx].music.provider === "upload" &&
-    posts[idx].music.url !== next.music?.url
-  ) {
-    deleteLocalUpload(posts[idx].music.url);
+  if (current.music && current.music.provider === "upload" && current.music.url !== next.music?.url) {
+    deleteLocalUpload(current.music.url);
   }
-
-  posts[idx] = {
-    ...posts[idx],
-    caption: next.caption.trim(),
-    media: next.media,
-    music: next.music,
-  };
-  savePosts(posts);
-  return posts[idx];
+  try {
+    const result = await db.query(
+      `UPDATE posts
+       SET caption = $3, media = $4::jsonb, music = $5::jsonb
+       WHERE id = $1 AND user_id = $2
+       RETURNING *`,
+      [postId, userId, next.caption.trim(), JSON.stringify(next.media), JSON.stringify(next.music)]
+    );
+    const row = result.rows[0];
+    return row ? mapPostRow(row as Record<string, unknown>) : null;
+  } catch (error) {
+    throw new DataStoreWriteError(error instanceof Error ? error.message : undefined);
+  }
 }
 
-export function deletePost(userId: string, postId: string): boolean {
-  const posts = getPosts();
-  const idx = posts.findIndex((p) => p.id === postId);
-  if (idx === -1) return false;
-  if (posts[idx].userId !== userId) return false;
-  for (const m of posts[idx].media) deleteLocalUpload(m.url);
-  if (posts[idx].music && posts[idx].music.provider === "upload") {
-    deleteLocalUpload(posts[idx].music.url);
+export async function deletePost(userId: string, postId: string): Promise<boolean> {
+  await ensureSchema();
+  const db = getPool();
+  const post = await findPostById(postId);
+  if (!post || post.userId !== userId) return false;
+  for (const m of post.media) deleteLocalUpload(m.url);
+  if (post.music && post.music.provider === "upload") deleteLocalUpload(post.music.url);
+  try {
+    const result = await db.query("DELETE FROM posts WHERE id = $1 AND user_id = $2", [postId, userId]);
+    return (result.rowCount ?? 0) > 0;
+  } catch (error) {
+    throw new DataStoreWriteError(error instanceof Error ? error.message : undefined);
   }
-  posts.splice(idx, 1);
-  savePosts(posts);
-  return true;
 }

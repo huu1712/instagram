@@ -9,7 +9,7 @@ export default async function EditPostPage({ params }: { params: Promise<{ id: s
   const { id } = await params;
   const userId = await getSessionUserId();
   if (!userId) redirect("/login");
-  const post = findPostById(id);
+  const post = await findPostById(id);
   if (!post || post.userId !== userId) redirect("/");
 
   return (

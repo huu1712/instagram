@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function EditProfilePage() {
   const userId = await getSessionUserId();
   if (!userId) redirect("/login");
-  const user = findUserById(userId);
+  const user = await findUserById(userId);
   if (!user) redirect("/login");
 
   return (

@@ -6,8 +6,19 @@ import { FeedSwitcher } from "@/app/components/FeedSwitcher";
 export const dynamic = "force-dynamic";
 
 export default async function FeedPage() {
-  const posts = getPosts();
+  const posts = await getPosts();
   const me = await getSessionUserId();
+  const items = await Promise.all(
+    posts.map(async (post) => {
+      const author = await findUserById(post.userId);
+      return {
+        post,
+        authorName: author?.displayName ?? "Ẩn danh",
+        authorAvatar: author?.avatarUrl ?? null,
+        isOwner: me != null && me === post.userId,
+      };
+    })
+  );
 
   return (
     <div className="space-y-4">
@@ -21,17 +32,7 @@ export default async function FeedPage() {
           .
         </div>
       ) : (
-        <FeedSwitcher
-          items={posts.map((post) => {
-            const author = findUserById(post.userId);
-            return {
-              post,
-              authorName: author?.displayName ?? "Ẩn danh",
-              authorAvatar: author?.avatarUrl ?? null,
-              isOwner: me != null && me === post.userId,
-            };
-          })}
-        />
+        <FeedSwitcher items={items} />
       )}
     </div>
   );

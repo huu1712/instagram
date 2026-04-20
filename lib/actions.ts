@@ -6,6 +6,7 @@ import { uploadFileToCloudinary } from "@/lib/cloudinary";
 import {
   addPost,
   createUser,
+  DataStoreWriteError,
   deletePost,
   findPostById,
   findUserByUsername,
@@ -98,10 +99,15 @@ export async function loginAction(_prev: ActionState, formData: FormData): Promi
   if (username !== FIXED_USERNAME || password !== FIXED_PASSWORD) {
     return { error: "Sai tên đăng nhập hoặc mật khẩu." };
   }
-  let user = findUserByUsername(FIXED_USERNAME);
+  let user = await findUserByUsername(FIXED_USERNAME);
   if (!user) {
-    const { salt, hash } = hashPassword(FIXED_PASSWORD);
-    user = createUser(FIXED_USERNAME, salt, hash);
+    try {
+      const { salt, hash } = hashPassword(FIXED_PASSWORD);
+      user = await createUser(FIXED_USERNAME, salt, hash);
+    } catch (error) {
+      if (error instanceof DataStoreWriteError) return { error: error.message };
+      return { error: "Không tạo được tài khoản mặc định." };
+    }
   }
   await setSessionCookie(user.id);
   redirect("/");
@@ -140,7 +146,13 @@ export async function updateProfileAction(
 
   const patch: { displayName: string; avatarUrl?: string | null } = { displayName };
   if (avatarUrl !== undefined) patch.avatarUrl = avatarUrl;
-  const u = updateUserProfile(userId, patch);
+  let u;
+  try {
+    u = await updateUserProfile(userId, patch);
+  } catch (error) {
+    if (error instanceof DataStoreWriteError) return { error: error.message };
+    return { error: "Không thể cập nhật hồ sơ lúc này." };
+  }
   if (!u) return { error: "Không tìm thấy người dùng." };
   return { ok: "Đã lưu hồ sơ." };
 }
@@ -179,7 +191,12 @@ export async function createPostAction(
     }
   }
 
-  addPost(userId, media, caption, music);
+  try {
+    await addPost(userId, media, caption, music);
+  } catch (error) {
+    if (error instanceof DataStoreWriteError) return { error: error.message };
+    return { error: "Không thể tạo bài đăng lúc này." };
+  }
   redirect("/");
 }
 
@@ -192,7 +209,7 @@ export async function updatePostAction(
   const postId = String(formData.get("postId") ?? "").trim();
   if (!postId) return { error: "Thiếu bài đăng." };
 
-  const post = findPostById(postId);
+  const post = await findPostById(postId);
   if (!post || post.userId !== userId) return { error: "Không tìm thấy bài đăng." };
 
   const caption = String(formData.get("caption") ?? "");
@@ -238,7 +255,12 @@ export async function updatePostAction(
     }
   }
 
-  updatePost(userId, postId, { caption, media: finalMedia, music: nextMusic });
+  try {
+    await updatePost(userId, postId, { caption, media: finalMedia, music: nextMusic });
+  } catch (error) {
+    if (error instanceof DataStoreWriteError) return { error: error.message };
+    return { error: "Không thể cập nhật bài đăng lúc này." };
+  }
   redirect("/");
 }
 
@@ -250,7 +272,12 @@ export async function deletePostAction(
   if (!userId) return { error: "Chưa đăng nhập." };
   const postId = String(formData.get("postId") ?? "").trim();
   if (!postId) return { error: "Thiếu bài đăng." };
-  if (!deletePost(userId, postId)) return { error: "Không xóa được bài đăng." };
+  try {
+    if (!(await deletePost(userId, postId))) return { error: "Không xóa được bài đăng." };
+  } catch (error) {
+    if (error instanceof DataStoreWriteError) return { error: error.message };
+    return { error: "Không thể xóa bài đăng lúc này." };
+  }
   redirect("/");
 }
 

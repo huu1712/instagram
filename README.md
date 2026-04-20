@@ -24,9 +24,10 @@ Create `.env.local` from `.env.example` and set:
 - `CLOUDINARY_API_KEY`
 - `CLOUDINARY_API_SECRET`
 - `CLOUDINARY_FOLDER` (optional)
+- `DATABASE_URL`
 - `AUTH_SECRET`
 
-The app now uploads media to Cloudinary, which is required for deploy platforms like Vercel (read-only filesystem).
+The app uploads media to Cloudinary and stores users/posts in Postgres, which is required for deploy platforms like Vercel (read-only filesystem).
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
