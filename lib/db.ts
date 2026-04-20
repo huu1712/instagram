@@ -38,13 +38,16 @@ const USERS_FILE = path.join(DATA_DIR, "users.json");
 const POSTS_FILE = path.join(DATA_DIR, "posts.json");
 
 function ensureDataDir() {
-  if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+  try {
+    if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
+  } catch {
+    // Vercel runtime filesystem is read-only; ignore to avoid crashing.
+  }
 }
 
 function readJsonFile<T>(file: string, fallback: T): T {
-  ensureDataDir();
-  if (!existsSync(file)) return fallback;
   try {
+    if (!existsSync(file)) return fallback;
     return JSON.parse(readFileSync(file, "utf8")) as T;
   } catch {
     return fallback;
@@ -52,8 +55,12 @@ function readJsonFile<T>(file: string, fallback: T): T {
 }
 
 function writeJsonFile(file: string, data: unknown) {
-  ensureDataDir();
-  writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
+  try {
+    ensureDataDir();
+    writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
+  } catch {
+    // Ignore write failure in immutable serverless FS.
+  }
 }
 
 /** Chuẩn hoá bài cũ chỉ có `imageUrl` */
@@ -172,7 +179,11 @@ export function deleteLocalUpload(url: string) {
   const name = url.slice("/uploads/".length).replace(/[/\\]/g, "");
   if (!name || name.includes("..")) return;
   const full = path.join(process.cwd(), "public", "uploads", name);
-  if (existsSync(full)) unlinkSync(full);
+  try {
+    if (existsSync(full)) unlinkSync(full);
+  } catch {
+    // Ignore delete failure in immutable serverless FS.
+  }
 }
 
 export function addPost(

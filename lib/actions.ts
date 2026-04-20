@@ -27,7 +27,11 @@ const MAX_VIDEO = 40 * 1024 * 1024;
 const MAX_AUDIO = 20 * 1024 * 1024;
 
 function ensureUploadDir() {
-  mkdirSync(UPLOAD_DIR, { recursive: true });
+  try {
+    mkdirSync(UPLOAD_DIR, { recursive: true });
+  } catch {
+    // Ignore write-protected filesystem errors (e.g. Vercel runtime).
+  }
 }
 
 function extFromMime(mime: string): string {
@@ -64,10 +68,14 @@ async function saveUploadedMedia(
     };
   }
   const buf = Buffer.from(await file.arrayBuffer());
-  ensureUploadDir();
-  const name = `${randomUUID()}.${extFromMime(mime)}`;
-  writeFileSync(path.join(UPLOAD_DIR, name), buf);
-  return { ok: { url: `/uploads/${name}`, kind } };
+  try {
+    ensureUploadDir();
+    const name = `${randomUUID()}.${extFromMime(mime)}`;
+    writeFileSync(path.join(UPLOAD_DIR, name), buf);
+    return { ok: { url: `/uploads/${name}`, kind } };
+  } catch {
+    return { error: "Server deploy không hỗ trợ lưu file cục bộ. Hãy dùng Cloudinary/S3." };
+  }
 }
 
 async function saveUploadedMusic(file: File): Promise<{ ok: string } | { error: string }> {
@@ -75,10 +83,14 @@ async function saveUploadedMusic(file: File): Promise<{ ok: string } | { error: 
   if (!mime.startsWith("audio/")) return { error: "Nhạc phải là file audio." };
   if (file.size > MAX_AUDIO) return { error: "File nhạc tối đa 20MB." };
   const buf = Buffer.from(await file.arrayBuffer());
-  ensureUploadDir();
-  const name = `${randomUUID()}.${extFromMime(mime)}`;
-  writeFileSync(path.join(UPLOAD_DIR, name), buf);
-  return { ok: `/uploads/${name}` };
+  try {
+    ensureUploadDir();
+    const name = `${randomUUID()}.${extFromMime(mime)}`;
+    writeFileSync(path.join(UPLOAD_DIR, name), buf);
+    return { ok: `/uploads/${name}` };
+  } catch {
+    return { error: "Server deploy không hỗ trợ lưu file cục bộ. Hãy dùng Cloudinary/S3." };
+  }
 }
 
 export type ActionState = { error?: string; ok?: string };
@@ -143,10 +155,14 @@ export async function updateProfileAction(
     if (!mime.startsWith("image/")) return { error: "Ảnh đại diện phải là file ảnh." };
     if (avatar.size > 2 * 1024 * 1024) return { error: "Ảnh tối đa 2MB." };
     const buf = Buffer.from(await avatar.arrayBuffer());
-    ensureUploadDir();
-    const name = `${randomUUID()}.${extFromMime(mime)}`;
-    writeFileSync(path.join(UPLOAD_DIR, name), buf);
-    avatarUrl = `/uploads/${name}`;
+    try {
+      ensureUploadDir();
+      const name = `${randomUUID()}.${extFromMime(mime)}`;
+      writeFileSync(path.join(UPLOAD_DIR, name), buf);
+      avatarUrl = `/uploads/${name}`;
+    } catch {
+      return { error: "Server deploy không hỗ trợ lưu ảnh cục bộ. Hãy dùng Cloudinary/S3." };
+    }
   }
 
   const patch: { displayName: string; avatarUrl?: string | null } = { displayName };
