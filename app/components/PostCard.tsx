@@ -98,10 +98,10 @@ export function PostCard({
           <p className="text-xs text-zinc-500">{timeAgo(post.createdAt)}</p>
         </div>
         {isOwner ? (
-        <div className="flex shrink-0 items-center gap-1.5">
+          <div className="flex shrink-0 items-center gap-1.5">
             <Link
               href={`/post/${post.id}/edit`}
-                className="rounded-full px-2 py-1 text-xs font-medium text-sky-300 hover:bg-white/8"
+              className="rounded-full px-2 py-1 text-xs font-medium text-sky-300 hover:bg-white/8"
             >
               Sửa
             </Link>
@@ -113,7 +113,7 @@ export function PostCard({
                 onClick={confirmDelete}
                 className="rounded-full px-2 py-1 text-xs font-medium text-red-300 hover:bg-white/8 disabled:opacity-50"
               >
-                {delPending ? "…" : "Xóa"}
+                {delPending ? "Đang xóa…" : "Xóa"}
               </button>
             </form>
           </div>
