@@ -1,10 +1,8 @@
 "use server";
 
 import { redirect } from "next/navigation";
-import { randomUUID } from "node:crypto";
-import { mkdirSync, writeFileSync } from "node:fs";
-import path from "node:path";
 import { clearSessionCookie, getSessionUserId, setSessionCookie } from "@/lib/auth";
+import { uploadFileToCloudinary } from "@/lib/cloudinary";
 import {
   addPost,
   createUser,
@@ -18,36 +16,12 @@ import {
 } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
 
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
 const FIXED_USERNAME = "Youyue1314";
 const FIXED_PASSWORD = "ht161723!";
 
 const MAX_IMAGE = 5 * 1024 * 1024;
 const MAX_VIDEO = 40 * 1024 * 1024;
 const MAX_AUDIO = 20 * 1024 * 1024;
-
-function ensureUploadDir() {
-  try {
-    mkdirSync(UPLOAD_DIR, { recursive: true });
-  } catch {
-    // Ignore write-protected filesystem errors (e.g. Vercel runtime).
-  }
-}
-
-function extFromMime(mime: string): string {
-  if (mime === "image/png") return "png";
-  if (mime === "image/webp") return "webp";
-  if (mime === "image/gif") return "gif";
-  if (mime === "video/webm") return "webm";
-  if (mime === "video/mp4" || mime === "video/x-m4v") return "mp4";
-  if (mime === "video/quicktime") return "mov";
-  if (mime === "audio/mpeg") return "mp3";
-  if (mime === "audio/mp4") return "m4a";
-  if (mime === "audio/wav" || mime === "audio/x-wav") return "wav";
-  if (mime === "audio/ogg") return "ogg";
-  if (mime === "audio/aac") return "aac";
-  return "jpg";
-}
 
 function kindFromMime(mime: string): "image" | "video" | null {
   if (mime.startsWith("image/")) return "image";
@@ -67,14 +41,15 @@ async function saveUploadedMedia(
       error: kind === "image" ? "Mỗi ảnh tối đa 5MB." : "Mỗi video tối đa 40MB.",
     };
   }
-  const buf = Buffer.from(await file.arrayBuffer());
+
   try {
-    ensureUploadDir();
-    const name = `${randomUUID()}.${extFromMime(mime)}`;
-    writeFileSync(path.join(UPLOAD_DIR, name), buf);
-    return { ok: { url: `/uploads/${name}`, kind } };
-  } catch {
-    return { error: "Server deploy không hỗ trợ lưu file cục bộ. Hãy dùng Cloudinary/S3." };
+    const { secureUrl, resourceType } = await uploadFileToCloudinary(file);
+    const normalizedKind: "image" | "video" =
+      resourceType === "image" || kind === "image" ? "image" : "video";
+    return { ok: { url: secureUrl, kind: normalizedKind } };
+  } catch (error) {
+    const message = error instanceof Error && error.message ? error.message : "Upload media thất bại.";
+    return { error: message };
   }
 }
 
@@ -82,14 +57,13 @@ async function saveUploadedMusic(file: File): Promise<{ ok: string } | { error: 
   const mime = file.type || "application/octet-stream";
   if (!mime.startsWith("audio/")) return { error: "Nhạc phải là file audio." };
   if (file.size > MAX_AUDIO) return { error: "File nhạc tối đa 20MB." };
-  const buf = Buffer.from(await file.arrayBuffer());
+
   try {
-    ensureUploadDir();
-    const name = `${randomUUID()}.${extFromMime(mime)}`;
-    writeFileSync(path.join(UPLOAD_DIR, name), buf);
-    return { ok: `/uploads/${name}` };
-  } catch {
-    return { error: "Server deploy không hỗ trợ lưu file cục bộ. Hãy dùng Cloudinary/S3." };
+    const { secureUrl } = await uploadFileToCloudinary(file);
+    return { ok: secureUrl };
+  } catch (error) {
+    const message = error instanceof Error && error.message ? error.message : "Upload nhạc thất bại.";
+    return { error: message };
   }
 }
 
@@ -154,14 +128,13 @@ export async function updateProfileAction(
     const mime = avatar.type || "image/jpeg";
     if (!mime.startsWith("image/")) return { error: "Ảnh đại diện phải là file ảnh." };
     if (avatar.size > 2 * 1024 * 1024) return { error: "Ảnh tối đa 2MB." };
-    const buf = Buffer.from(await avatar.arrayBuffer());
+
     try {
-      ensureUploadDir();
-      const name = `${randomUUID()}.${extFromMime(mime)}`;
-      writeFileSync(path.join(UPLOAD_DIR, name), buf);
-      avatarUrl = `/uploads/${name}`;
-    } catch {
-      return { error: "Server deploy không hỗ trợ lưu ảnh cục bộ. Hãy dùng Cloudinary/S3." };
+      const { secureUrl } = await uploadFileToCloudinary(avatar);
+      avatarUrl = secureUrl;
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : "Upload ảnh đại diện thất bại.";
+      return { error: message };
     }
   }
 

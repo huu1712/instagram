@@ -1,0 +1,67 @@
+import { createHash } from "node:crypto";
+
+const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
+const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY;
+const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET;
+const CLOUDINARY_FOLDER = process.env.CLOUDINARY_FOLDER?.trim() || "instagram-demo";
+
+function createCloudinarySignature(params: Record<string, string>, apiSecret: string) {
+  const toSign = Object.keys(params)
+    .sort()
+    .map((key) => `${key}=${params[key]}`)
+    .join("&");
+  return createHash("sha1").update(`${toSign}${apiSecret}`).digest("hex");
+}
+
+function assertCloudinaryEnv() {
+  if (!CLOUDINARY_CLOUD_NAME || !CLOUDINARY_API_KEY || !CLOUDINARY_API_SECRET) {
+    throw new Error("Thiếu biến môi trường Cloudinary.");
+  }
+}
+
+export async function uploadFileToCloudinary(
+  file: File
+): Promise<{ secureUrl: string; resourceType: string }> {
+  assertCloudinaryEnv();
+
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const paramsToSign = {
+    folder: CLOUDINARY_FOLDER,
+    timestamp,
+  };
+  const signature = createCloudinarySignature(paramsToSign, CLOUDINARY_API_SECRET!);
+  const body = new FormData();
+  body.append("file", file);
+  body.append("folder", CLOUDINARY_FOLDER);
+  body.append("timestamp", timestamp);
+  body.append("api_key", CLOUDINARY_API_KEY!);
+  body.append("signature", signature);
+
+  const url = `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`;
+  const res = await fetch(url, {
+    method: "POST",
+    body,
+  });
+
+  if (!res.ok) {
+    let msg = `Cloudinary upload failed (${res.status})`;
+    try {
+      const payload = (await res.json()) as { error?: { message?: string } };
+      const detail = payload?.error?.message?.trim();
+      if (detail) msg = detail;
+    } catch {
+      // Keep fallback message.
+    }
+    throw new Error(msg);
+  }
+
+  const payload = (await res.json()) as {
+    secure_url?: string;
+    resource_type?: string;
+  };
+  if (!payload.secure_url) throw new Error("Cloudinary không trả về URL file.");
+  return {
+    secureUrl: payload.secure_url,
+    resourceType: payload.resource_type ?? "raw",
+  };
+}
