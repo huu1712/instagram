@@ -23,6 +23,8 @@ const FIXED_PASSWORD = "ht161723!";
 const MAX_IMAGE = 5 * 1024 * 1024;
 const MAX_VIDEO = 40 * 1024 * 1024;
 const MAX_AUDIO = 20 * 1024 * 1024;
+const MAX_MEDIA_ITEMS = 20;
+const MAX_TOTAL_MEDIA_BYTES = 120 * 1024 * 1024;
 
 function kindFromMime(mime: string): "image" | "video" | null {
   if (mime.startsWith("image/")) return "image";
@@ -163,6 +165,24 @@ function collectMediaFiles(formData: FormData, fieldName: string): File[] {
     .filter((x): x is File => x instanceof File && x.size > 0);
 }
 
+async function uploadMediaBatch(
+  files: File[]
+): Promise<{ ok: PostMediaItem[] } | { error: string }> {
+  if (files.length > MAX_MEDIA_ITEMS) {
+    return { error: `Bạn chỉ có thể tải tối đa ${MAX_MEDIA_ITEMS} file cho một bài đăng.` };
+  }
+  const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
+  if (totalBytes > MAX_TOTAL_MEDIA_BYTES) {
+    return { error: "Tổng dung lượng media quá lớn. Hãy giảm số lượng hoặc chọn file nhẹ hơn." };
+  }
+
+  // Upload song song để giảm timeout trên môi trường deploy.
+  const results = await Promise.all(files.map((file) => saveUploadedMedia(file)));
+  const firstError = results.find((r) => "error" in r);
+  if (firstError && "error" in firstError) return { error: firstError.error };
+  return { ok: results.map((r) => (r as { ok: PostMediaItem }).ok) };
+}
+
 export async function createPostAction(
   _prev: ActionState,
   formData: FormData
@@ -173,12 +193,9 @@ export async function createPostAction(
   const files = collectMediaFiles(formData, "media");
   if (files.length === 0) return { error: "Hãy chọn ít nhất một ảnh hoặc video." };
 
-  const media: PostMediaItem[] = [];
-  for (const file of files) {
-    const r = await saveUploadedMedia(file);
-    if ("error" in r) return { error: r.error };
-    media.push(r.ok);
-  }
+    const uploaded = await uploadMediaBatch(files);
+    if ("error" in uploaded) return { error: uploaded.error };
+    const media = uploaded.ok;
 
   const selectedMusic = readSelectedMusic(formData);
   let music: PostMusic | null = selectedMusic;
@@ -231,12 +248,9 @@ export async function updatePostAction(
   }
 
   const newFiles = collectMediaFiles(formData, "media");
-  const newMedia: PostMediaItem[] = [];
-  for (const file of newFiles) {
-    const r = await saveUploadedMedia(file);
-    if ("error" in r) return { error: r.error };
-    newMedia.push(r.ok);
-  }
+  const uploaded = await uploadMediaBatch(newFiles);
+  if ("error" in uploaded) return { error: uploaded.error };
+  const newMedia = uploaded.ok;
 
   const finalMedia = [...preserved, ...newMedia];
   if (finalMedia.length === 0) return { error: "Cần ít nhất một ảnh hoặc video." };

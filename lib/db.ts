@@ -2,6 +2,7 @@ import { existsSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
+import { deleteFileFromCloudinary } from "@/lib/cloudinary";
 
 export type User = {
   id: string;
@@ -253,7 +254,15 @@ export async function updateUserProfile(
   }
 }
 
-export function deleteLocalUpload(url: string) {
+export async function deleteManagedUpload(url: string) {
+  if (url.startsWith("http://") || url.startsWith("https://")) {
+    try {
+      await deleteFileFromCloudinary(url);
+    } catch {
+      // Ignore cloud delete failures to avoid blocking post operations.
+    }
+    return;
+  }
   if (!url.startsWith("/uploads/")) return;
   const name = url.slice("/uploads/".length).replace(/[/\\]/g, "");
   if (!name || name.includes("..")) return;
@@ -261,7 +270,7 @@ export function deleteLocalUpload(url: string) {
   try {
     if (existsSync(full)) unlinkSync(full);
   } catch {
-    // Ignore delete failure in immutable serverless FS.
+    // Ignore local delete failures.
   }
 }
 
@@ -306,10 +315,10 @@ export async function updatePost(
   const prevUrls = new Set(current.media.map((m) => m.url));
   const nextUrls = new Set(next.media.map((m) => m.url));
   for (const url of prevUrls) {
-    if (!nextUrls.has(url)) deleteLocalUpload(url);
+    if (!nextUrls.has(url)) await deleteManagedUpload(url);
   }
   if (current.music && current.music.provider === "upload" && current.music.url !== next.music?.url) {
-    deleteLocalUpload(current.music.url);
+    await deleteManagedUpload(current.music.url);
   }
   try {
     const result = await db.query(
@@ -331,8 +340,8 @@ export async function deletePost(userId: string, postId: string): Promise<boolea
   const db = getPool();
   const post = await findPostById(postId);
   if (!post || post.userId !== userId) return false;
-  for (const m of post.media) deleteLocalUpload(m.url);
-  if (post.music && post.music.provider === "upload") deleteLocalUpload(post.music.url);
+  for (const m of post.media) await deleteManagedUpload(m.url);
+  if (post.music && post.music.provider === "upload") await deleteManagedUpload(post.music.url);
   try {
     const result = await db.query("DELETE FROM posts WHERE id = $1 AND user_id = $2", [postId, userId]);
     return (result.rowCount ?? 0) > 0;
