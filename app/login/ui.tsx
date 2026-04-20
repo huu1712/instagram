@@ -45,7 +45,12 @@ export function LoginForm() {
         disabled={pending}
         className="w-full rounded-xl bg-gradient-to-r from-sky-500 via-cyan-500 to-indigo-500 py-2.5 text-sm font-semibold text-white shadow-lg shadow-sky-950/40 transition hover:brightness-110 disabled:opacity-50"
       >
-        {pending ? "Đang xử lý…" : "Đăng nhập"}
+        <span className="inline-flex items-center justify-center gap-2">
+          {pending ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          ) : null}
+          {pending ? "Đăng nhập…" : "Đăng nhập"}
+        </span>
       </button>
     </form>
   );

@@ -113,7 +113,12 @@ export function PostCard({
                 onClick={confirmDelete}
                 className="rounded-full px-2 py-1 text-xs font-medium text-red-300 hover:bg-white/8 disabled:opacity-50"
               >
-                {delPending ? "Đang xóa…" : "Xóa"}
+                <span className="inline-flex items-center gap-1">
+                  {delPending ? (
+                    <span className="h-3 w-3 animate-spin rounded-full border border-red-300/40 border-t-red-300" />
+                  ) : null}
+                  {delPending ? "Xóa…" : "Xóa"}
+                </span>
               </button>
             </form>
           </div>

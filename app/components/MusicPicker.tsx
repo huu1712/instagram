@@ -64,7 +64,12 @@ export function MusicPicker({ initial }: { initial?: PostMusic | null }) {
           disabled={loading}
           className="shrink-0 rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-700 disabled:opacity-50"
         >
-          {loading ? "..." : "Tìm"}
+          <span className="inline-flex items-center gap-1.5">
+            {loading ? (
+              <span className="h-3.5 w-3.5 animate-spin rounded-full border border-zinc-400/40 border-t-zinc-100" />
+            ) : null}
+            {loading ? "Tìm…" : "Tìm"}
+          </span>
         </button>
       </div>
       {error ? <p className="text-sm text-red-400">{error}</p> : null}

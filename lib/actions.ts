@@ -20,41 +20,8 @@ import { hashPassword } from "@/lib/password";
 const FIXED_USERNAME = "Youyue1314";
 const FIXED_PASSWORD = "ht161723!";
 
-const MAX_IMAGE = 5 * 1024 * 1024;
-const MAX_VIDEO = 40 * 1024 * 1024;
 const MAX_AUDIO = 20 * 1024 * 1024;
-const MAX_MEDIA_ITEMS = 20;
-const MAX_TOTAL_MEDIA_BYTES = 120 * 1024 * 1024;
 
-function kindFromMime(mime: string): "image" | "video" | null {
-  if (mime.startsWith("image/")) return "image";
-  if (mime.startsWith("video/")) return "video";
-  return null;
-}
-
-async function saveUploadedMedia(
-  file: File
-): Promise<{ ok: PostMediaItem } | { error: string }> {
-  const mime = file.type || "application/octet-stream";
-  const kind = kindFromMime(mime);
-  if (!kind) return { error: "Chỉ chấp nhận ảnh hoặc video." };
-  const max = kind === "image" ? MAX_IMAGE : MAX_VIDEO;
-  if (file.size > max) {
-    return {
-      error: kind === "image" ? "Mỗi ảnh tối đa 5MB." : "Mỗi video tối đa 40MB.",
-    };
-  }
-
-  try {
-    const { secureUrl, resourceType } = await uploadFileToCloudinary(file);
-    const normalizedKind: "image" | "video" =
-      resourceType === "image" || kind === "image" ? "image" : "video";
-    return { ok: { url: secureUrl, kind: normalizedKind } };
-  } catch (error) {
-    const message = error instanceof Error && error.message ? error.message : "Upload media thất bại.";
-    return { error: message };
-  }
-}
 
 async function saveUploadedMusic(file: File): Promise<{ ok: string } | { error: string }> {
   const mime = file.type || "application/octet-stream";
@@ -129,21 +96,14 @@ export async function updateProfileAction(
   const displayName = String(formData.get("displayName") ?? "").trim();
   if (displayName.length < 1) return { error: "Tên hiển thị không được để trống." };
 
-  const avatar = formData.get("avatar");
+  // avatarUrl được upload client-side, nhận qua hidden input
+  const avatarUrlInput = String(formData.get("avatarUrl") ?? "").trim();
   let avatarUrl: string | null | undefined;
-
-  if (avatar instanceof File && avatar.size > 0) {
-    const mime = avatar.type || "image/jpeg";
-    if (!mime.startsWith("image/")) return { error: "Ảnh đại diện phải là file ảnh." };
-    if (avatar.size > 2 * 1024 * 1024) return { error: "Ảnh tối đa 2MB." };
-
-    try {
-      const { secureUrl } = await uploadFileToCloudinary(avatar);
-      avatarUrl = secureUrl;
-    } catch (error) {
-      const message = error instanceof Error && error.message ? error.message : "Upload ảnh đại diện thất bại.";
-      return { error: message };
+  if (avatarUrlInput) {
+    if (!avatarUrlInput.startsWith("https://res.cloudinary.com/")) {
+      return { error: "URL ảnh đại diện không hợp lệ." };
     }
+    avatarUrl = avatarUrlInput;
   }
 
   const patch: { displayName: string; avatarUrl?: string | null } = { displayName };
@@ -159,28 +119,25 @@ export async function updateProfileAction(
   return { ok: "Đã lưu hồ sơ." };
 }
 
-function collectMediaFiles(formData: FormData, fieldName: string): File[] {
-  return formData
-    .getAll(fieldName)
-    .filter((x): x is File => x instanceof File && x.size > 0);
-}
-
-async function uploadMediaBatch(
-  files: File[]
-): Promise<{ ok: PostMediaItem[] } | { error: string }> {
-  if (files.length > MAX_MEDIA_ITEMS) {
-    return { error: `Bạn chỉ có thể tải tối đa ${MAX_MEDIA_ITEMS} file cho một bài đăng.` };
+function parseMediaUrlsJson(raw: string): { ok: PostMediaItem[] } | { error: string } {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { error: "Dữ liệu media không hợp lệ." };
   }
-  const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
-  if (totalBytes > MAX_TOTAL_MEDIA_BYTES) {
-    return { error: "Tổng dung lượng media quá lớn. Hãy giảm số lượng hoặc chọn file nhẹ hơn." };
+  if (!Array.isArray(parsed)) return { error: "Dữ liệu media không hợp lệ." };
+  for (const item of parsed) {
+    if (
+      !item ||
+      typeof item.url !== "string" ||
+      !item.url.startsWith("https://") ||
+      (item.kind !== "image" && item.kind !== "video")
+    ) {
+      return { error: "Dữ liệu media không hợp lệ." };
+    }
   }
-
-  // Upload song song để giảm timeout trên môi trường deploy.
-  const results = await Promise.all(files.map((file) => saveUploadedMedia(file)));
-  const firstError = results.find((r) => "error" in r);
-  if (firstError && "error" in firstError) return { error: firstError.error };
-  return { ok: results.map((r) => (r as { ok: PostMediaItem }).ok) };
+  return { ok: parsed as PostMediaItem[] };
 }
 
 export async function createPostAction(
@@ -190,12 +147,12 @@ export async function createPostAction(
   const userId = await getSessionUserId();
   if (!userId) return { error: "Chưa đăng nhập." };
   const caption = String(formData.get("caption") ?? "");
-  const files = collectMediaFiles(formData, "media");
-  if (files.length === 0) return { error: "Hãy chọn ít nhất một ảnh hoặc video." };
 
-    const uploaded = await uploadMediaBatch(files);
-    if ("error" in uploaded) return { error: uploaded.error };
-    const media = uploaded.ok;
+  const mediaUrlsRaw = String(formData.get("media_urls_json") ?? "[]");
+  const parsedMedia = parseMediaUrlsJson(mediaUrlsRaw);
+  if ("error" in parsedMedia) return { error: parsedMedia.error };
+  const media = parsedMedia.ok;
+  if (media.length === 0) return { error: "Hãy chọn ít nhất một ảnh hoặc video." };
 
   const selectedMusic = readSelectedMusic(formData);
   let music: PostMusic | null = selectedMusic;
@@ -247,10 +204,11 @@ export async function updatePostAction(
     if (!allowed.has(`${p.url}\0${p.kind}`)) return { error: "Media giữ lại không khớp bài đăng." };
   }
 
-  const newFiles = collectMediaFiles(formData, "media");
-  const uploaded = await uploadMediaBatch(newFiles);
-  if ("error" in uploaded) return { error: uploaded.error };
-  const newMedia = uploaded.ok;
+  // Media mới đã được upload client-side, chỉ nhận URLs.
+  const newMediaRaw = String(formData.get("new_media_urls_json") ?? "[]");
+  const parsedNew = parseMediaUrlsJson(newMediaRaw);
+  if ("error" in parsedNew) return { error: parsedNew.error };
+  const newMedia = parsedNew.ok;
 
   const finalMedia = [...preserved, ...newMedia];
   if (finalMedia.length === 0) return { error: "Cần ít nhất một ảnh hoặc video." };

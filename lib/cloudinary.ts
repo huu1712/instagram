@@ -114,3 +114,24 @@ export async function deleteFileFromCloudinary(fileUrl: string): Promise<void> {
     body,
   });
 }
+
+/** Tạo signed-upload params để client upload trực tiếp lên Cloudinary (bỏ qua server). */
+export function generateUploadSignature(): {
+  cloudName: string;
+  apiKey: string;
+  timestamp: string;
+  folder: string;
+  signature: string;
+} {
+  assertCloudinaryEnv();
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const paramsToSign = { folder: CLOUDINARY_FOLDER, timestamp };
+  const signature = createCloudinarySignature(paramsToSign, CLOUDINARY_API_SECRET!);
+  return {
+    cloudName: CLOUDINARY_CLOUD_NAME!,
+    apiKey: CLOUDINARY_API_KEY!,
+    timestamp,
+    folder: CLOUDINARY_FOLDER,
+    signature,
+  };
+}

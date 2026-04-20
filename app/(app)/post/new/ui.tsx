@@ -1,17 +1,64 @@
 "use client";
 
-import { useActionState, useRef } from "react";
+import { useActionState, useRef, useState } from "react";
 import { createPostAction, type ActionState } from "@/lib/actions";
 import { MusicPicker } from "@/app/components/MusicPicker";
+import { useCloudinaryUpload, type UploadedMedia } from "@/app/components/useCloudinaryUpload";
 
 const initial: ActionState = {};
+
+function UploadProgressBar({ name, percent, done, error }: { name: string; percent: number; done: boolean; error?: string }) {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-2">
+        <span className="truncate text-xs text-zinc-400">{name}</span>
+        {error ? (
+          <span className="shrink-0 text-xs text-red-400">Lỗi</span>
+        ) : done ? (
+          <span className="shrink-0 text-xs text-emerald-400">✓</span>
+        ) : (
+          <span className="shrink-0 text-xs text-zinc-400">{percent}%</span>
+        )}
+      </div>
+      <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
+        <div
+          className={`h-full rounded-full transition-all duration-300 ${
+            error ? "bg-red-500" : done ? "bg-emerald-500" : "bg-sky-500"
+          }`}
+          style={{ width: `${error ? 100 : percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
 
 export function NewPostForm() {
   const [state, formAction, pending] = useActionState(createPostAction, initial);
   const formRef = useRef<HTMLFormElement>(null);
   const allowSubmitRef = useRef(false);
+  const mediaUrlsRef = useRef<UploadedMedia[]>([]);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [uploadError, setUploadError] = useState("");
+  const { uploadFiles, uploading, progresses } = useCloudinaryUpload();
 
-  function submitByButtonClick() {
+  const isLoading = uploading || pending;
+
+  async function submitByButtonClick() {
+    setUploadError("");
+    mediaUrlsRef.current = [];
+
+    if (selectedFiles.length === 0) {
+      setUploadError("Hãy chọn ít nhất một ảnh hoặc video.");
+      return;
+    }
+
+    const result = await uploadFiles(selectedFiles);
+    if ("error" in result) {
+      setUploadError(result.error);
+      return;
+    }
+    mediaUrlsRef.current = result.ok;
+
     allowSubmitRef.current = true;
     formRef.current?.requestSubmit();
   }
@@ -28,32 +75,59 @@ export function NewPostForm() {
         allowSubmitRef.current = false;
       }}
     >
+      {/* Hidden input chứa URLs đã upload */}
+      <input
+        type="hidden"
+        name="media_urls_json"
+        value={JSON.stringify(mediaUrlsRef.current)}
+        readOnly
+      />
+
+      {/* Overlay khi Server Action đang chạy */}
       {pending ? (
-        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/45 backdrop-blur-[1px]">
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-zinc-900/90 px-3 py-1.5 text-xs text-zinc-200">
-            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
-            Đang xử lý...
+        <div className="absolute inset-0 z-10 flex items-center justify-center rounded-2xl bg-black/50 backdrop-blur-[2px]">
+          <div className="inline-flex flex-col items-center gap-3">
+            <span className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+            <span className="text-xs font-medium text-zinc-300">Đang đăng bài…</span>
           </div>
         </div>
       ) : null}
+
       <div>
         <label htmlFor="media" className="mb-1.5 block text-sm font-medium text-zinc-300">
           Ảnh hoặc video (chọn nhiều file)
         </label>
         <input
           id="media"
-          name="media"
+          name="media_picker"
           type="file"
           accept="image/*,video/*"
           multiple
           required
-          disabled={pending}
+          disabled={isLoading}
+          onChange={(e) => {
+            setSelectedFiles(Array.from(e.target.files ?? []));
+            setUploadError("");
+          }}
           className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-xl file:border-0 file:bg-zinc-800 file:px-3.5 file:py-2 file:font-medium file:text-zinc-200 hover:file:bg-zinc-700"
         />
         <p className="mt-1.5 text-xs text-zinc-500">
           Ảnh tối đa 5MB mỗi file · video tối đa 40MB mỗi file (mp4, webm, mov…)
         </p>
       </div>
+
+      {/* Progress bars */}
+      {progresses.length > 0 ? (
+        <div className="space-y-2 rounded-xl border border-white/10 bg-black/30 p-3">
+          <p className="text-xs font-medium text-zinc-400">
+            {uploading ? "Đang upload lên Cloudinary…" : "Upload hoàn tất"}
+          </p>
+          {progresses.map((p, i) => (
+            <UploadProgressBar key={i} {...p} />
+          ))}
+        </div>
+      ) : null}
+
       <div>
         <label htmlFor="caption" className="mb-1.5 block text-sm font-medium text-zinc-300">
           Chú thích
@@ -63,7 +137,7 @@ export function NewPostForm() {
           name="caption"
           rows={4}
           placeholder="Viết gì đó…"
-          disabled={pending}
+          disabled={isLoading}
           className="w-full resize-none rounded-xl border border-white/10 bg-black/45 px-3.5 py-2.5 text-white outline-none ring-sky-500/80 placeholder:text-zinc-500 focus:border-sky-500/50 focus:ring-2"
         />
       </div>
@@ -77,27 +151,36 @@ export function NewPostForm() {
           name="music"
           type="file"
           accept="audio/*"
-          disabled={pending}
+          disabled={isLoading}
           className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-xl file:border-0 file:bg-zinc-800 file:px-3.5 file:py-2 file:font-medium file:text-zinc-200 hover:file:bg-zinc-700"
         />
         <p className="mt-1.5 text-xs text-zinc-500">
           Tối đa 20MB (mp3, m4a, wav, ogg...). Nếu đã chọn nhạc Deezer thì sẽ ưu tiên Deezer.
         </p>
       </div>
+
+      {uploadError ? (
+        <p className="rounded-xl border border-red-500/35 bg-red-500/10 px-3 py-2 text-sm text-red-300" role="alert">
+          {uploadError}
+        </p>
+      ) : null}
       {state.error ? (
         <p className="rounded-xl border border-red-500/35 bg-red-500/10 px-3 py-2 text-sm text-red-300" role="alert">
           {state.error}
         </p>
       ) : null}
+
       <button
         type="button"
-        onClick={submitByButtonClick}
-        disabled={pending}
+        onClick={() => void submitByButtonClick()}
+        disabled={isLoading}
         className="w-full rounded-xl bg-gradient-to-r from-amber-500 via-pink-500 to-purple-600 py-2.5 text-sm font-semibold text-white shadow-lg shadow-fuchsia-950/40 transition hover:brightness-110 disabled:opacity-50"
       >
         <span className="inline-flex items-center justify-center gap-2">
-          {pending ? <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" /> : null}
-          {pending ? "Đang đăng…" : "Chia sẻ"}
+          {uploading ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          ) : null}
+          {uploading ? "Đang upload…" : pending ? "Đang đăng…" : "Chia sẻ"}
         </span>
       </button>
     </form>

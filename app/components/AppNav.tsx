@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useFormStatus } from "react-dom";
 import { logoutAction } from "@/lib/actions";
 
 function navLink(href: string, label: string, pathname: string) {
@@ -20,6 +21,22 @@ function navLink(href: string, label: string, pathname: string) {
   );
 }
 
+function LogoutButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button
+      type="submit"
+      disabled={pending}
+      className="ml-1 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-medium text-zinc-300 transition hover:bg-white/8 hover:text-white disabled:opacity-50"
+    >
+      {pending ? (
+        <span className="h-3.5 w-3.5 animate-spin rounded-full border border-zinc-400/40 border-t-zinc-200" />
+      ) : null}
+      {pending ? "Đang thoát…" : "Thoát"}
+    </button>
+  );
+}
+
 export function AppNav() {
   const pathname = usePathname();
 
@@ -34,12 +51,7 @@ export function AppNav() {
           {navLink("/post/new", "Đăng bài", pathname)}
           {navLink("/profile/edit", "Hồ sơ", pathname)}
           <form action={logoutAction}>
-            <button
-              type="submit"
-              className="ml-1 rounded-full px-3 py-1.5 text-sm font-medium text-zinc-300 hover:bg-white/8 hover:text-white"
-            >
-              Thoát
-            </button>
+            <LogoutButton />
           </form>
         </nav>
       </div>

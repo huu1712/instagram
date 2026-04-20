@@ -47,7 +47,12 @@ export function RegisterForm() {
         disabled={pending}
         className="w-full rounded-lg bg-sky-500 py-2.5 text-sm font-semibold text-white hover:bg-sky-400 disabled:opacity-50"
       >
-        {pending ? "Đang tạo…" : "Tạo tài khoản"}
+        <span className="inline-flex items-center justify-center gap-2">
+          {pending ? (
+            <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+          ) : null}
+          {pending ? "Tạo tài khoản…" : "Tạo tài khoản"}
+        </span>
       </button>
     </form>
   );
