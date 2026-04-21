@@ -36,7 +36,7 @@ export function NewPostForm() {
   const [state, formAction, pending] = useActionState(createPostAction, initial);
   const formRef = useRef<HTMLFormElement>(null);
   const allowSubmitRef = useRef(false);
-  const mediaUrlsRef = useRef<UploadedMedia[]>([]);
+  const [mediaUrls, setMediaUrls] = useState<UploadedMedia[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadError, setUploadError] = useState("");
   const { uploadFiles, uploading, progresses } = useCloudinaryUpload();
@@ -45,7 +45,7 @@ export function NewPostForm() {
 
   async function submitByButtonClick() {
     setUploadError("");
-    mediaUrlsRef.current = [];
+    setMediaUrls([]);
 
     if (selectedFiles.length === 0) {
       setUploadError("Hãy chọn ít nhất một ảnh hoặc video.");
@@ -57,7 +57,7 @@ export function NewPostForm() {
       setUploadError(result.error);
       return;
     }
-    mediaUrlsRef.current = result.ok;
+    setMediaUrls(result.ok);
 
     allowSubmitRef.current = true;
     formRef.current?.requestSubmit();
@@ -79,7 +79,7 @@ export function NewPostForm() {
       <input
         type="hidden"
         name="media_urls_json"
-        value={JSON.stringify(mediaUrlsRef.current)}
+        value={JSON.stringify(mediaUrls)}
         readOnly
       />
 

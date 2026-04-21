@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 const CLOUDINARY_CLOUD_NAME = process.env.CLOUDINARY_CLOUD_NAME;
 const CLOUDINARY_API_KEY = process.env.CLOUDINARY_API_KEY;
 const CLOUDINARY_API_SECRET = process.env.CLOUDINARY_API_SECRET;
-const CLOUDINARY_FOLDER = process.env.CLOUDINARY_FOLDER?.trim() || "instagram-demo";
+const CLOUDINARY_FOLDER = process.env.CLOUDINARY_FOLDER?.trim() || "instagram";
 
 function createCloudinarySignature(params: Record<string, string>, apiSecret: string) {
   const toSign = Object.keys(params)
