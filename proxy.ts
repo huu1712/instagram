@@ -4,8 +4,13 @@ import { getAuthSecret, SESSION_COOKIE, verifySessionToken } from "@/lib/session
 
 const PUBLIC_PATHS = new Set(["/login"]);
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Local dev: bypass auth entirely (no login required).
+  if (process.env.NODE_ENV !== "production") {
+    return NextResponse.next();
+  }
 
   if (pathname.startsWith("/uploads") || pathname === "/favicon.ico") {
     return NextResponse.next();

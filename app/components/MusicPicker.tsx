@@ -14,6 +14,8 @@ type SearchTrack = {
 export function MusicPicker({ initial }: { initial?: PostMusic | null }) {
   const [keyword, setKeyword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [selectingId, setSelectingId] = useState<string | null>(null);
+  const [clearingSelected, setClearingSelected] = useState(false);
   const [error, setError] = useState("");
   const [results, setResults] = useState<SearchTrack[]>([]);
   const [selected, setSelected] = useState<PostMusic | null>(initial ?? null);
@@ -41,14 +43,36 @@ export function MusicPicker({ initial }: { initial?: PostMusic | null }) {
     }
   }
 
+  function handleSelectTrack(track: SearchTrack) {
+    setSelectingId(track.id);
+    setSelected({
+      provider: "deezer",
+      url: track.previewUrl,
+      title: track.title,
+      artist: track.artist,
+    });
+    setAutoPlaySelected(true);
+    setTimeout(() => {
+      setSelectingId((current) => (current === track.id ? null : current));
+    }, 250);
+  }
+
+  function handleClearSelected() {
+    setClearingSelected(true);
+    setSelected(null);
+    setAutoPlaySelected(false);
+    setTimeout(() => setClearingSelected(false), 200);
+  }
+
   return (
-    <div className="space-y-3 rounded-lg border border-white/10 bg-black/40 p-4">
+    <div className="music-picker space-y-3 rounded-lg border border-white/10 bg-black/40 p-4">
       <p className="text-sm font-medium text-zinc-300">Chọn nhạc từ Deezer (preview)</p>
       <div className="flex gap-2">
         <input
           type="search"
           value={keyword}
           onChange={(e) => setKeyword(e.target.value)}
+          disabled={loading}
           onKeyDownCapture={(e) => {
             if (e.key !== "Enter" || e.nativeEvent.isComposing) return;
             e.preventDefault();
@@ -56,13 +80,13 @@ export function MusicPicker({ initial }: { initial?: PostMusic | null }) {
             void onSearch();
           }}
           placeholder="Nhập tên bài hát hoặc ca sĩ..."
-          className="w-full rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white outline-none ring-sky-500 focus:ring-2"
+          className="music-picker-search w-full rounded-xl border border-white/10 bg-black/70 px-3.5 py-2.5 text-sm text-white outline-none ring-sky-500/70 transition placeholder:text-zinc-500 focus:border-sky-500/50 focus:ring-2"
         />
         <button
           type="button"
           onClick={onSearch}
           disabled={loading}
-          className="shrink-0 rounded-lg bg-zinc-800 px-4 py-2 text-sm font-medium text-zinc-100 hover:bg-zinc-700 disabled:opacity-50"
+          className="music-picker-search-button shrink-0 rounded-xl bg-zinc-800 px-4 py-2.5 text-sm font-medium text-zinc-100 transition hover:bg-zinc-700 disabled:opacity-50"
         >
           <span className="inline-flex items-center gap-1.5">
             {loading ? (
@@ -72,6 +96,7 @@ export function MusicPicker({ initial }: { initial?: PostMusic | null }) {
           </span>
         </button>
       </div>
+      {loading ? <p className="text-xs text-zinc-500">Đang gọi Deezer API để tìm nhạc...</p> : null}
       {error ? <p className="text-sm text-red-400">{error}</p> : null}
       {selected ? (
         <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
@@ -89,13 +114,14 @@ export function MusicPicker({ initial }: { initial?: PostMusic | null }) {
           />
           <button
             type="button"
-            onClick={() => {
-              setSelected(null);
-              setAutoPlaySelected(false);
-            }}
-            className="mt-2 text-xs text-zinc-300 underline-offset-2 hover:underline"
+            onClick={handleClearSelected}
+            disabled={clearingSelected}
+            className="mt-2 inline-flex items-center gap-1.5 text-xs text-zinc-300 underline-offset-2 hover:underline disabled:opacity-60"
           >
-            Bỏ chọn nhạc Deezer
+            {clearingSelected ? (
+              <span className="h-3 w-3 animate-spin rounded-full border border-zinc-400/40 border-t-zinc-200" />
+            ) : null}
+            {clearingSelected ? "Đang bỏ chọn..." : "Bỏ chọn nhạc Deezer"}
           </button>
         </div>
       ) : null}
@@ -109,18 +135,16 @@ export function MusicPicker({ initial }: { initial?: PostMusic | null }) {
                 <audio src={track.previewUrl} controls className="w-full" preload="none" />
                 <button
                   type="button"
-                  onClick={() => {
-                    setSelected({
-                      provider: "deezer",
-                      url: track.previewUrl,
-                      title: track.title,
-                      artist: track.artist,
-                    });
-                    setAutoPlaySelected(true);
-                  }}
-                  className="shrink-0 rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-400"
+                  onClick={() => handleSelectTrack(track)}
+                  disabled={loading || selectingId === track.id}
+                  className="shrink-0 rounded-lg bg-sky-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-400 disabled:opacity-60"
                 >
-                  Chọn
+                  <span className="inline-flex items-center gap-1.5">
+                    {selectingId === track.id ? (
+                      <span className="h-3 w-3 animate-spin rounded-full border border-white/40 border-t-white" />
+                    ) : null}
+                    {selectingId === track.id ? "Đang chọn..." : "Chọn"}
+                  </span>
                 </button>
               </div>
             </li>

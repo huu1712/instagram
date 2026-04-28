@@ -1,8 +1,8 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { clearSessionCookie, getSessionUserId, setSessionCookie } from "@/lib/auth";
-import { uploadFileToCloudinary } from "@/lib/cloudinary";
 import {
   addPost,
   createUser,
@@ -10,6 +10,7 @@ import {
   deletePost,
   findPostById,
   findUserByUsername,
+  setPostPinned,
   type PostMediaItem,
   type PostMusic,
   updatePost,
@@ -19,23 +20,6 @@ import { hashPassword } from "@/lib/password";
 
 const FIXED_USERNAME = "Youyue1314";
 const FIXED_PASSWORD = "ht161723!";
-
-const MAX_AUDIO = 20 * 1024 * 1024;
-
-
-async function saveUploadedMusic(file: File): Promise<{ ok: string } | { error: string }> {
-  const mime = file.type || "application/octet-stream";
-  if (!mime.startsWith("audio/")) return { error: "Nhạc phải là file audio." };
-  if (file.size > MAX_AUDIO) return { error: "File nhạc tối đa 20MB." };
-
-  try {
-    const { secureUrl } = await uploadFileToCloudinary(file);
-    return { ok: secureUrl };
-  } catch (error) {
-    const message = error instanceof Error && error.message ? error.message : "Upload nhạc thất bại.";
-    return { error: message };
-  }
-}
 
 export type ActionState = { error?: string; ok?: string };
 
@@ -55,10 +39,7 @@ function readSelectedMusic(formData: FormData): PostMusic | null {
   };
 }
 
-export async function registerAction(
-  _prev: ActionState,
-  _formData: FormData
-): Promise<ActionState> {
+export async function registerAction(): Promise<ActionState> {
   return { error: "Chức năng đăng ký đã tắt." };
 }
 
@@ -154,16 +135,7 @@ export async function createPostAction(
   const media = parsedMedia.ok;
   if (media.length === 0) return { error: "Hãy chọn ít nhất một ảnh hoặc video." };
 
-  const selectedMusic = readSelectedMusic(formData);
-  let music: PostMusic | null = selectedMusic;
-  if (!music) {
-    const musicFile = formData.get("music");
-    if (musicFile instanceof File && musicFile.size > 0) {
-      const r = await saveUploadedMusic(musicFile);
-      if ("error" in r) return { error: r.error };
-      music = { provider: "upload", url: r.ok, title: "Nhạc tải lên", artist: "" };
-    }
-  }
+  const music: PostMusic | null = readSelectedMusic(formData);
 
   try {
     await addPost(userId, media, caption, music);
@@ -218,13 +190,6 @@ export async function updatePostAction(
   const selectedMusic = readSelectedMusic(formData);
   if (selectedMusic) {
     nextMusic = selectedMusic;
-  } else {
-    const musicFile = formData.get("music");
-    if (musicFile instanceof File && musicFile.size > 0) {
-      const r = await saveUploadedMusic(musicFile);
-      if ("error" in r) return { error: r.error };
-      nextMusic = { provider: "upload", url: r.ok, title: "Nhạc tải lên", artist: "" };
-    }
   }
 
   try {
@@ -251,6 +216,32 @@ export async function deletePostAction(
     return { error: "Không thể xóa bài đăng lúc này." };
   }
   redirect("/");
+}
+
+export async function togglePostPinnedAction(
+  _prev: ActionState,
+  formData: FormData
+): Promise<ActionState> {
+  const userId = await getSessionUserId();
+  if (!userId) return { error: "Chưa đăng nhập." };
+
+  const postId = String(formData.get("postId") ?? "").trim();
+  if (!postId) return { error: "Thiếu bài đăng." };
+
+  const pinnedInput = String(formData.get("pinned") ?? "").trim();
+  const pinned = pinnedInput === "true";
+
+  try {
+    const updated = await setPostPinned(userId, postId, pinned);
+    if (!updated) return { error: "Không cập nhật được trạng thái ghim." };
+  } catch (error) {
+    if (error instanceof DataStoreWriteError) return { error: error.message };
+    return { error: "Không thể cập nhật trạng thái ghim lúc này." };
+  }
+
+  revalidatePath("/");
+  revalidatePath(`/post/${postId}`);
+  return { ok: pinned ? "Đã ghim bài viết." : "Đã bỏ ghim bài viết." };
 }
 
 export async function seedDemoUserAction(): Promise<ActionState> {

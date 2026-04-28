@@ -32,6 +32,7 @@ export type Post = {
   media: PostMediaItem[];
   music: PostMusic | null;
   caption: string;
+  pinned: boolean;
   createdAt: string;
 };
 
@@ -85,11 +86,19 @@ async function ensureSchema() {
           media JSONB NOT NULL,
           music JSONB NULL,
           caption TEXT NOT NULL,
+          pinned BOOLEAN NOT NULL DEFAULT FALSE,
           created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
       `);
       await db.query(`
+        ALTER TABLE posts
+        ADD COLUMN IF NOT EXISTS pinned BOOLEAN NOT NULL DEFAULT FALSE;
+      `);
+      await db.query(`
         CREATE INDEX IF NOT EXISTS idx_posts_created_at ON posts(created_at DESC);
+      `);
+      await db.query(`
+        CREATE INDEX IF NOT EXISTS idx_posts_pinned_created_at ON posts(pinned DESC, created_at DESC);
       `);
     })();
   }
@@ -141,6 +150,7 @@ function mapPostRow(row: Record<string, unknown>): Post {
     media: parseMedia(row.media),
     music: parseMusic(row.music),
     caption: String(row.caption ?? ""),
+    pinned: row.pinned === true,
     createdAt: new Date(String(row.created_at)).toISOString(),
   };
 }
@@ -160,7 +170,7 @@ export async function getPosts(): Promise<Post[]> {
   try {
     await ensureSchema();
     const db = getPool();
-    const result = await db.query("SELECT * FROM posts ORDER BY created_at DESC");
+    const result = await db.query("SELECT * FROM posts ORDER BY pinned DESC, created_at DESC");
     return result.rows.map((row: unknown) => mapPostRow(row as Record<string, unknown>));
   } catch {
     return [];
@@ -288,13 +298,14 @@ export async function addPost(
     media,
     music,
     caption: caption.trim(),
+    pinned: false,
     createdAt: new Date().toISOString(),
   };
   try {
     await db.query(
-      `INSERT INTO posts (id, user_id, media, music, caption, created_at)
-       VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6)`,
-      [post.id, post.userId, JSON.stringify(post.media), JSON.stringify(post.music), post.caption, post.createdAt]
+      `INSERT INTO posts (id, user_id, media, music, caption, pinned, created_at)
+       VALUES ($1, $2, $3::jsonb, $4::jsonb, $5, $6, $7)`,
+      [post.id, post.userId, JSON.stringify(post.media), JSON.stringify(post.music), post.caption, post.pinned, post.createdAt]
     );
     return post;
   } catch (error) {
@@ -345,6 +356,24 @@ export async function deletePost(userId: string, postId: string): Promise<boolea
   try {
     const result = await db.query("DELETE FROM posts WHERE id = $1 AND user_id = $2", [postId, userId]);
     return (result.rowCount ?? 0) > 0;
+  } catch (error) {
+    throw new DataStoreWriteError(error instanceof Error ? error.message : undefined);
+  }
+}
+
+export async function setPostPinned(userId: string, postId: string, pinned: boolean): Promise<Post | null> {
+  await ensureSchema();
+  const db = getPool();
+  try {
+    const result = await db.query(
+      `UPDATE posts
+       SET pinned = $3
+       WHERE id = $1 AND user_id = $2
+       RETURNING *`,
+      [postId, userId, pinned]
+    );
+    const row = result.rows[0];
+    return row ? mapPostRow(row as Record<string, unknown>) : null;
   } catch (error) {
     throw new DataStoreWriteError(error instanceof Error ? error.message : undefined);
   }

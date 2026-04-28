@@ -65,11 +65,12 @@ export function MediaCarousel({ media }: { media: PostMediaItem[] }) {
 
   return (
     <div
-      className="relative w-full overflow-hidden bg-black/90"
+      className="relative w-full overflow-hidden bg-black"
       onTouchStart={(e) => handleSwipeStart(e.touches[0].clientX, e.touches[0].clientY)}
       onTouchEnd={(e) => handleSwipeEnd(e.changedTouches[0].clientX, e.changedTouches[0].clientY)}
     >
       <div className="relative aspect-square w-full">
+        <div className="pointer-events-none absolute inset-x-0 top-0 z-[1] h-24 bg-gradient-to-b from-black/35 to-transparent" />
         {cur.kind === "video" ? (
           <video
             key={cur.url}
@@ -102,13 +103,17 @@ export function MediaCarousel({ media }: { media: PostMediaItem[] }) {
             className="h-full w-full cursor-zoom-in object-contain"
           />
         )}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 z-[1] h-28 bg-gradient-to-t from-black/45 to-transparent" />
+        <div className="absolute right-3 top-3 z-10 rounded-full border border-white/10 bg-black/55 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-white/85 backdrop-blur">
+          {i + 1}/{n}
+        </div>
       </div>
       {n > 1 ? (
         <>
           <button
             type="button"
             onClick={prev}
-            className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-base text-white backdrop-blur hover:bg-black/70"
+            className="absolute left-3 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/10 bg-black/55 px-3 py-2 text-base text-white backdrop-blur transition hover:bg-black/75"
             aria-label="Trước"
           >
             ‹
@@ -116,18 +121,20 @@ export function MediaCarousel({ media }: { media: PostMediaItem[] }) {
           <button
             type="button"
             onClick={next}
-            className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/10 bg-black/55 px-3 py-1.5 text-base text-white backdrop-blur hover:bg-black/70"
+            className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-full border border-white/10 bg-black/55 px-3 py-2 text-base text-white backdrop-blur transition hover:bg-black/75"
             aria-label="Sau"
           >
             ›
           </button>
-          <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1">
+          <div className="absolute bottom-3 left-0 right-0 z-10 flex justify-center gap-1.5">
             {media.map((_, idx) => (
               <button
                 key={idx}
                 type="button"
                 onClick={() => setI(idx)}
-                className={`h-1.5 w-1.5 rounded-full transition ${idx === i ? "bg-white" : "bg-white/40"}`}
+                className={`rounded-full transition ${
+                  idx === i ? "h-2 w-6 bg-white shadow-[0_0_20px_rgba(255,255,255,0.5)]" : "h-2 w-2 bg-white/35"
+                }`}
                 aria-label={`Slide ${idx + 1}`}
               />
             ))}

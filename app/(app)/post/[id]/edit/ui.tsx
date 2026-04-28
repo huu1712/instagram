@@ -35,10 +35,10 @@ function UploadProgressBar({ name, percent, done, error }: { name: string; perce
 
 export function EditPostForm({ post }: { post: Post }) {
   const [preserved, setPreserved] = useState<PostMediaItem[]>(post.media);
+  const [newMediaUrls, setNewMediaUrls] = useState<UploadedMedia[]>([]);
   const [state, formAction, pending] = useActionState(updatePostAction, initial);
   const formRef = useRef<HTMLFormElement>(null);
   const allowSubmitRef = useRef(false);
-  const newMediaUrlsRef = useRef<UploadedMedia[]>([]);
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [uploadError, setUploadError] = useState("");
   const { uploadFiles, uploading, progresses } = useCloudinaryUpload();
@@ -47,7 +47,7 @@ export function EditPostForm({ post }: { post: Post }) {
 
   async function submitByButtonClick() {
     setUploadError("");
-    newMediaUrlsRef.current = [];
+    setNewMediaUrls([]);
 
     if (selectedFiles.length > 0) {
       const result = await uploadFiles(selectedFiles);
@@ -55,7 +55,7 @@ export function EditPostForm({ post }: { post: Post }) {
         setUploadError(result.error);
         return;
       }
-      newMediaUrlsRef.current = result.ok;
+      setNewMediaUrls(result.ok);
     }
 
     allowSubmitRef.current = true;
@@ -77,7 +77,7 @@ export function EditPostForm({ post }: { post: Post }) {
       {/* Hidden inputs */}
       <input type="hidden" name="postId" value={post.id} />
       <input type="hidden" name="existing_json" readOnly value={JSON.stringify(preserved)} />
-      <input type="hidden" name="new_media_urls_json" readOnly value={JSON.stringify(newMediaUrlsRef.current)} />
+      <input type="hidden" name="new_media_urls_json" readOnly value={JSON.stringify(newMediaUrls)} />
 
       {/* Overlay khi Server Action đang chạy */}
       {pending ? (
@@ -191,22 +191,6 @@ export function EditPostForm({ post }: { post: Post }) {
           <p className="text-sm text-zinc-500">Chưa có nhạc cho bài viết này.</p>
         )}
         <MusicPicker initial={post.music?.provider === "deezer" ? post.music : null} />
-        <div>
-          <label htmlFor="music" className="mb-1 block text-sm text-zinc-400">
-            Hoặc tải nhạc mới từ máy (tùy chọn)
-          </label>
-          <input
-            id="music"
-            name="music"
-            type="file"
-            accept="audio/*"
-            disabled={isLoading}
-            className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-xl file:border-0 file:bg-zinc-800 file:px-3.5 file:py-2 file:font-medium file:text-zinc-200 hover:file:bg-zinc-700"
-          />
-          <p className="mt-1 text-xs text-zinc-600">
-            Nếu chọn Deezer và file cùng lúc, hệ thống sẽ ưu tiên Deezer.
-          </p>
-        </div>
       </div>
 
       {uploadError ? (

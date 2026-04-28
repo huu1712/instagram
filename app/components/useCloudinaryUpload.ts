@@ -67,9 +67,6 @@ function uploadWithProgress(
   });
 }
 
-const MAX_IMAGE = 5 * 1024 * 1024;
-const MAX_VIDEO = 40 * 1024 * 1024;
-
 export function useCloudinaryUpload() {
   const [progresses, setProgresses] = useState<UploadProgress[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -81,10 +78,6 @@ export function useCloudinaryUpload() {
     for (const f of files) {
       const kind = mimeToKind(f.type);
       if (!kind) return { error: `File "${f.name}" không phải ảnh hoặc video.` };
-      const max = kind === "image" ? MAX_IMAGE : MAX_VIDEO;
-      if (f.size > max) {
-        return { error: kind === "image" ? `"${f.name}": Ảnh tối đa 5MB.` : `"${f.name}": Video tối đa 40MB.` };
-      }
     }
 
     setUploading(true);

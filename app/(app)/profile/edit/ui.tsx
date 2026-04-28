@@ -6,8 +6,6 @@ import { updateProfileAction, type ActionState } from "@/lib/actions";
 
 const initial: ActionState = {};
 
-const MAX_AVATAR = 2 * 1024 * 1024;
-
 type SignResponse = {
   cloudName: string;
   apiKey: string;
@@ -18,7 +16,6 @@ type SignResponse = {
 
 async function uploadAvatarDirect(file: File): Promise<{ ok: string } | { error: string }> {
   if (!file.type.startsWith("image/")) return { error: "Ảnh đại diện phải là file ảnh." };
-  if (file.size > MAX_AVATAR) return { error: "Ảnh tối đa 2MB." };
 
   let sign: SignResponse;
   try {

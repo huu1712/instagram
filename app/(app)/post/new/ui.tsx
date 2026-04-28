@@ -3,7 +3,7 @@
 import { useActionState, useRef, useState } from "react";
 import { createPostAction, type ActionState } from "@/lib/actions";
 import { MusicPicker } from "@/app/components/MusicPicker";
-import { useCloudinaryUpload, type UploadedMedia } from "@/app/components/useCloudinaryUpload";
+import { useCloudinaryUpload } from "@/app/components/useCloudinaryUpload";
 
 const initial: ActionState = {};
 
@@ -115,9 +115,7 @@ export function NewPostForm() {
           }}
           className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-xl file:border-0 file:bg-zinc-800 file:px-3.5 file:py-2 file:font-medium file:text-zinc-200 hover:file:bg-zinc-700"
         />
-        <p className="mt-1.5 text-xs text-zinc-500">
-          Ảnh tối đa 5MB mỗi file · video tối đa 40MB mỗi file (mp4, webm, mov…)
-        </p>
+        <p className="mt-1.5 text-xs text-zinc-500">Giới hạn dung lượng phụ thuộc Cloudinary (plan) và trình duyệt.</p>
       </div>
 
       {/* Progress bars */}
@@ -146,22 +144,6 @@ export function NewPostForm() {
         />
       </div>
       <MusicPicker />
-      <div>
-        <label htmlFor="music" className="mb-1.5 block text-sm font-medium text-zinc-300">
-          Hoặc tải nhạc từ máy (tùy chọn)
-        </label>
-        <input
-          id="music"
-          name="music"
-          type="file"
-          accept="audio/*"
-          disabled={isLoading}
-          className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-xl file:border-0 file:bg-zinc-800 file:px-3.5 file:py-2 file:font-medium file:text-zinc-200 hover:file:bg-zinc-700"
-        />
-        <p className="mt-1.5 text-xs text-zinc-500">
-          Tối đa 20MB (mp3, m4a, wav, ogg...). Nếu đã chọn nhạc Deezer thì sẽ ưu tiên Deezer.
-        </p>
-      </div>
 
       {uploadError ? (
         <p className="rounded-xl border border-red-500/35 bg-red-500/10 px-3 py-2 text-sm text-red-300" role="alert">
