@@ -248,9 +248,17 @@ export function PostCard({
                 </button>
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between gap-3">
-                    <p className="truncate text-sm font-medium text-white">
-                      {isPlaying ? "Đang phát nhạc" : "Sẵn sàng phát nhạc"}
-                    </p>
+                    <div className="flex min-w-0 items-center gap-3">
+                      <p className="truncate text-sm font-medium text-white">
+                        {isPlaying ? "Đang phát nhạc" : "Sẵn sàng phát nhạc"}
+                      </p>
+                      <div className="music-waveform" data-playing={isPlaying ? "true" : "false"} aria-hidden="true">
+                        <span className="music-waveform-bar" />
+                        <span className="music-waveform-bar" />
+                        <span className="music-waveform-bar" />
+                        <span className="music-waveform-bar" />
+                      </div>
+                    </div>
                     <p className="shrink-0 text-xs text-zinc-300">
                       {formatAudioTime(currentTime)} / {formatAudioTime(duration)}
                     </p>
@@ -267,8 +275,7 @@ export function PostCard({
             <audio
               ref={audioRef}
               src={post.music.url}
-              controls
-              className="mt-3 w-full"
+              className="sr-only"
               preload="metadata"
             />
             <p className="mt-2 text-xs text-zinc-400">Nhấn nút phát để nghe nhạc nền cho bài viết này.</p>

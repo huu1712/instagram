@@ -21,6 +21,18 @@ html[data-theme="light"] {
   --font-mono: var(--font-geist-mono);
 }
 
+@keyframes music-wave {
+  0%,
+  100% {
+    transform: scaleY(0.35);
+    opacity: 0.45;
+  }
+  50% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
 html,
 body {
   min-height: 100%;
@@ -149,4 +161,36 @@ html[data-theme="light"] .feed-sort-chip-active {
   background: linear-gradient(135deg, #0f172a, #334155) !important;
   color: #ffffff !important;
   box-shadow: 0 10px 24px rgba(15, 23, 42, 0.16) !important;
+}
+
+.music-waveform {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 14px;
+}
+
+.music-waveform-bar {
+  width: 3px;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #38bdf8, #c084fc);
+  transform-origin: center bottom;
+  opacity: 0.45;
+}
+
+.music-waveform[data-playing="true"] .music-waveform-bar {
+  animation: music-wave 0.9s ease-in-out infinite;
+}
+
+.music-waveform[data-playing="true"] .music-waveform-bar:nth-child(2) {
+  animation-delay: 0.12s;
+}
+
+.music-waveform[data-playing="true"] .music-waveform-bar:nth-child(3) {
+  animation-delay: 0.24s;
+}
+
+.music-waveform[data-playing="true"] .music-waveform-bar:nth-child(4) {
+  animation-delay: 0.36s;
 }
