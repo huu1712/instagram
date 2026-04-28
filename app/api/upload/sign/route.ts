@@ -1,6 +1,8 @@
 import { generatePresignedUpload } from "@/lib/storage";
 import { getSessionUserId } from "@/lib/auth";
 
+export const runtime = "nodejs";
+
 export async function POST(request: Request) {
   const userId = await getSessionUserId();
   if (!userId) {

@@ -31,6 +31,19 @@ Create `.env.local` from `.env.example` and set:
 
 The app uploads media to Cloudflare R2 and stores users/posts in Postgres, which is required for deploy platforms like Vercel (read-only filesystem).
 
+## Cloudflare R2 CORS (required for browser upload)
+
+This app uploads directly from the browser to a presigned R2 URL (HTTP `PUT`). You must configure CORS on the R2 bucket (e.g. `memories`) to allow your site origin.
+
+Recommended CORS:
+
+- **Allowed origins**: your site URL(s), e.g. `https://<your-vercel-domain>` (and optionally `http://localhost:3000` for local)
+- **Allowed methods**: `PUT`, `GET`, `HEAD`
+- **Allowed headers**: `*` (or at least `content-type`)
+- **Expose headers**: `ETag` (optional)
+
+If CORS is not configured, uploads will fail with "Failed to fetch" / "Lỗi kết nối khi upload." even if presigning works.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

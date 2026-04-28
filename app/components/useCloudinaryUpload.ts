@@ -60,7 +60,10 @@ function uploadWithProgress(
         reject(new Error(`Upload thất bại (${xhr.status})`));
       }
     };
-    xhr.onerror = () => reject(new Error("Lỗi kết nối khi upload."));
+    xhr.onerror = () => {
+      // Most common cause here is CORS (blocked preflight) when uploading directly to R2.
+      reject(new Error("Lỗi kết nối khi upload. (Có thể do CORS Cloudflare R2)"));
+    };
     xhr.send(file);
   });
 }
