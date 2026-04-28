@@ -19,6 +19,13 @@ function timeAgo(iso: string) {
 
 const delInitial: ActionState = {};
 
+function formatAudioTime(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, "0")}`;
+}
+
 export function PostCard({
   post,
   authorName,
@@ -26,7 +33,6 @@ export function PostCard({
   isOwner,
   showDetailLink = true,
   showMusic = false,
-  autoPlayMusic = false,
 }: {
   post: Post;
   authorName: string;
@@ -34,13 +40,14 @@ export function PostCard({
   isOwner: boolean;
   showDetailLink?: boolean;
   showMusic?: boolean;
-  autoPlayMusic?: boolean;
 }) {
   const formRef = useRef<HTMLFormElement>(null);
   const pinFormRef = useRef<HTMLFormElement>(null);
   const audioRef = useRef<HTMLAudioElement>(null);
   const router = useRouter();
-  const [awaitingInteraction, setAwaitingInteraction] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
   const [delState, delAction, delPending] = useActionState(deletePostAction, delInitial);
   const [pinState, pinAction, pinPending] = useActionState(togglePostPinnedAction, {});
 
@@ -69,100 +76,47 @@ export function PostCard({
     pinFormRef.current?.requestSubmit();
   }
 
-  function markAutoplayIntent() {
-    if (!autoPlayMusic || typeof window === "undefined") return;
-    sessionStorage.setItem("gram-autoplay-intent", post.id);
-  }
-
-  async function handleOverlayPlay() {
+  async function toggleAudioPlayback() {
     const el = audioRef.current;
     if (!el) return;
     try {
-      await el.play();
-      setAwaitingInteraction(false);
-      if (typeof window !== "undefined") {
-        sessionStorage.removeItem("gram-autoplay-intent");
+      if (el.paused) {
+        await el.play();
+      } else {
+        el.pause();
       }
     } catch {
-      setAwaitingInteraction(true);
+      setIsPlaying(false);
     }
   }
 
   useEffect(() => {
-    if (!showMusic || !post.music || !autoPlayMusic) return;
     const el = audioRef.current;
-    if (!el) return;
+    if (!el || !showMusic || !post.music) return;
 
-    let cancelled = false;
-
-    const tryPlay = async () => {
-      try {
-        await el.play();
-        if (!cancelled) {
-          setAwaitingInteraction(false);
-          if (typeof window !== "undefined") {
-            sessionStorage.removeItem("gram-autoplay-intent");
-          }
-        }
-      } catch {
-        if (!cancelled) setAwaitingInteraction(true);
-      }
+    const onPlay = () => setIsPlaying(true);
+    const onPause = () => setIsPlaying(false);
+    const onTimeUpdate = () => setCurrentTime(el.currentTime);
+    const onLoadedMetadata = () => setDuration(el.duration || 0);
+    const onEnded = () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
     };
 
-    void tryPlay();
-
-    const hasIntent =
-      typeof window !== "undefined" &&
-      sessionStorage.getItem("gram-autoplay-intent") === post.id;
-
-    if (hasIntent) {
-      const retryOnPageReady = () => {
-        void tryPlay();
-      };
-
-      window.addEventListener("pageshow", retryOnPageReady);
-      window.addEventListener("focus", retryOnPageReady);
-      document.addEventListener("visibilitychange", retryOnPageReady);
-
-      return () => {
-        cancelled = true;
-        window.removeEventListener("pageshow", retryOnPageReady);
-        window.removeEventListener("focus", retryOnPageReady);
-        document.removeEventListener("visibilitychange", retryOnPageReady);
-      };
-    }
+    el.addEventListener("play", onPlay);
+    el.addEventListener("pause", onPause);
+    el.addEventListener("timeupdate", onTimeUpdate);
+    el.addEventListener("loadedmetadata", onLoadedMetadata);
+    el.addEventListener("ended", onEnded);
 
     return () => {
-      cancelled = true;
+      el.removeEventListener("play", onPlay);
+      el.removeEventListener("pause", onPause);
+      el.removeEventListener("timeupdate", onTimeUpdate);
+      el.removeEventListener("loadedmetadata", onLoadedMetadata);
+      el.removeEventListener("ended", onEnded);
     };
-  }, [autoPlayMusic, post.id, post.music, showMusic]);
-
-  useEffect(() => {
-    if (!awaitingInteraction || !showMusic || !post.music || !autoPlayMusic) return;
-
-    const resumePlayback = async () => {
-      const el = audioRef.current;
-      if (!el) return;
-      try {
-        await el.play();
-        setAwaitingInteraction(false);
-      } catch {
-        // Keep waiting for another user interaction.
-      }
-    };
-
-    const handleInteraction = () => {
-      void resumePlayback();
-    };
-
-    document.addEventListener("pointerdown", handleInteraction, { passive: true });
-    document.addEventListener("keydown", handleInteraction);
-
-    return () => {
-      document.removeEventListener("pointerdown", handleInteraction);
-      document.removeEventListener("keydown", handleInteraction);
-    };
-  }, [autoPlayMusic, awaitingInteraction, post.music, showMusic]);
+  }, [post.id, post.music, showMusic]);
 
   return (
     <li className="mx-auto w-full max-w-2xl overflow-hidden rounded-[1.75rem] border border-white/10 bg-zinc-950/78 shadow-[0_26px_80px_rgba(0,0,0,0.34)] backdrop-blur-xl">
@@ -257,7 +211,7 @@ export function PostCard({
       ) : null}
       {showMusic && post.music ? (
         <div className="border-t border-white/6 px-4 py-4">
-          <div className="relative rounded-[1.4rem] border border-fuchsia-500/20 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-sky-500/10 p-4">
+          <div className="rounded-[1.4rem] border border-fuchsia-500/20 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-sky-500/10 p-4">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-fuchsia-200/80">
@@ -272,32 +226,52 @@ export function PostCard({
                 {post.music.provider === "deezer" ? "Deezer" : "Upload"}
               </span>
             </div>
+            <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => void toggleAudioPlayback()}
+                  className="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-500 via-purple-500 to-sky-500 text-white shadow-lg shadow-fuchsia-950/30 transition hover:brightness-110"
+                  aria-label={isPlaying ? "Tạm dừng nhạc" : "Phát nhạc"}
+                >
+                  {isPlaying ? (
+                    <span className="flex gap-1">
+                      <span className="h-4 w-1 rounded-full bg-white" />
+                      <span className="h-4 w-1 rounded-full bg-white" />
+                    </span>
+                  ) : (
+                    <span
+                      aria-hidden="true"
+                      className="ml-0.5 h-0 w-0 border-y-[8px] border-y-transparent border-l-[13px] border-l-white"
+                    />
+                  )}
+                </button>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="truncate text-sm font-medium text-white">
+                      {isPlaying ? "Đang phát nhạc" : "Sẵn sàng phát nhạc"}
+                    </p>
+                    <p className="shrink-0 text-xs text-zinc-300">
+                      {formatAudioTime(currentTime)} / {formatAudioTime(duration)}
+                    </p>
+                  </div>
+                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-fuchsia-400 via-purple-400 to-sky-400 transition-all"
+                      style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
             <audio
               ref={audioRef}
               src={post.music.url}
-              controls={!(awaitingInteraction && autoPlayMusic)}
-              autoPlay={autoPlayMusic}
-              className={`w-full ${awaitingInteraction && autoPlayMusic ? "pointer-events-none opacity-70" : ""}`}
-              preload={autoPlayMusic ? "auto" : "metadata"}
+              controls
+              className="mt-3 w-full"
+              preload="metadata"
             />
-            {awaitingInteraction && autoPlayMusic ? (
-              <button
-                type="button"
-                onClick={() => void handleOverlayPlay()}
-                className="absolute inset-0 z-20 flex items-center justify-center rounded-[1.4rem] bg-black/42 backdrop-blur-[2px]"
-              >
-                <span className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-black/20">
-                  Chạm để phát nhạc
-                </span>
-              </button>
-            ) : null}
-            <p className="mt-2 text-xs text-zinc-400">
-              {awaitingInteraction && autoPlayMusic
-                ? "Trình duyệt đang chặn autoplay. Chạm vào khung nhạc để phát ngay."
-                : autoPlayMusic
-                  ? "Đang cố tự phát nhạc khi mở chi tiết bài viết."
-                  : "Nhấn play để nghe nhạc nền cho bài viết này."}
-            </p>
+            <p className="mt-2 text-xs text-zinc-400">Nhấn nút phát để nghe nhạc nền cho bài viết này.</p>
           </div>
         </div>
       ) : null}
@@ -307,7 +281,6 @@ export function PostCard({
             <p className="text-xs text-zinc-500">Mở để xem media và nhạc đầy đủ.</p>
             <Link
               href={`/post/${post.id}`}
-              onClick={markAutoplayIntent}
               className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:bg-white/10 hover:text-white"
             >
               Xem chi tiết

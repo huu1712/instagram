@@ -36,7 +36,6 @@ export default async function PostDetailPage({
           isOwner={isOwner}
           showDetailLink={false}
           showMusic
-          autoPlayMusic
         />
       </ul>
     </div>
