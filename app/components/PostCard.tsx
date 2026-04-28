@@ -74,6 +74,20 @@ export function PostCard({
     sessionStorage.setItem("gram-autoplay-intent", post.id);
   }
 
+  async function handleOverlayPlay() {
+    const el = audioRef.current;
+    if (!el) return;
+    try {
+      await el.play();
+      setAwaitingInteraction(false);
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("gram-autoplay-intent");
+      }
+    } catch {
+      setAwaitingInteraction(true);
+    }
+  }
+
   useEffect(() => {
     if (!showMusic || !post.music || !autoPlayMusic) return;
     const el = audioRef.current;
@@ -243,7 +257,7 @@ export function PostCard({
       ) : null}
       {showMusic && post.music ? (
         <div className="border-t border-white/6 px-4 py-4">
-          <div className="rounded-[1.4rem] border border-fuchsia-500/20 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-sky-500/10 p-4">
+          <div className="relative rounded-[1.4rem] border border-fuchsia-500/20 bg-gradient-to-r from-fuchsia-500/10 via-purple-500/10 to-sky-500/10 p-4">
             <div className="mb-3 flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-fuchsia-200/80">
@@ -266,9 +280,20 @@ export function PostCard({
               className="w-full"
               preload={autoPlayMusic ? "auto" : "metadata"}
             />
+            {awaitingInteraction && autoPlayMusic ? (
+              <button
+                type="button"
+                onClick={() => void handleOverlayPlay()}
+                className="absolute inset-0 z-10 flex items-center justify-center rounded-[1.4rem] bg-black/42 backdrop-blur-[2px]"
+              >
+                <span className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-black/20">
+                  Chạm để phát nhạc
+                </span>
+              </button>
+            ) : null}
             <p className="mt-2 text-xs text-zinc-400">
               {awaitingInteraction && autoPlayMusic
-                ? "Nhạc sẽ tự phát ngay khi bạn chạm hoặc bấm phím đầu tiên trên trang."
+                ? "Trình duyệt đang chặn autoplay. Chạm vào khung nhạc để phát ngay."
                 : autoPlayMusic
                   ? "Đang cố tự phát nhạc khi mở chi tiết bài viết."
                   : "Nhấn play để nghe nhạc nền cho bài viết này."}
