@@ -115,14 +115,14 @@ export function NewPostForm() {
           }}
           className="w-full text-sm text-zinc-400 file:mr-3 file:rounded-xl file:border-0 file:bg-zinc-800 file:px-3.5 file:py-2 file:font-medium file:text-zinc-200 hover:file:bg-zinc-700"
         />
-        <p className="mt-1.5 text-xs text-zinc-500">Giới hạn dung lượng phụ thuộc Cloudinary (plan) và trình duyệt.</p>
+        <p className="mt-1.5 text-xs text-zinc-500">Giới hạn dung lượng phụ thuộc Cloudflare R2 và trình duyệt.</p>
       </div>
 
       {/* Progress bars */}
       {progresses.length > 0 ? (
         <div className="space-y-2 rounded-xl border border-white/10 bg-black/30 p-3">
           <p className="text-xs font-medium text-zinc-400">
-            {uploading ? "Đang upload lên Cloudinary…" : "Upload hoàn tất"}
+            {uploading ? "Đang upload lên R2…" : "Upload hoàn tất"}
           </p>
           {progresses.map((p, i) => (
             <UploadProgressBar key={i} {...p} />

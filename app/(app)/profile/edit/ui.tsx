@@ -7,11 +7,8 @@ import { updateProfileAction, type ActionState } from "@/lib/actions";
 const initial: ActionState = {};
 
 type SignResponse = {
-  cloudName: string;
-  apiKey: string;
-  timestamp: string;
-  folder: string;
-  signature: string;
+  uploadUrl: string;
+  fileUrl: string;
 };
 
 async function uploadAvatarDirect(file: File): Promise<{ ok: string } | { error: string }> {
@@ -19,32 +16,32 @@ async function uploadAvatarDirect(file: File): Promise<{ ok: string } | { error:
 
   let sign: SignResponse;
   try {
-    const res = await fetch("/api/upload/sign");
+    const res = await fetch("/api/upload/sign", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        fileName: file.name,
+        contentType: file.type || "application/octet-stream",
+      }),
+    });
     if (!res.ok) throw new Error("Không lấy được thông tin upload.");
     sign = await res.json() as SignResponse;
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Lỗi lấy chữ ký upload." };
   }
 
-  const body = new FormData();
-  body.append("file", file);
-  body.append("folder", sign.folder);
-  body.append("timestamp", sign.timestamp);
-  body.append("api_key", sign.apiKey);
-  body.append("signature", sign.signature);
-
   try {
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${sign.cloudName}/image/upload`, {
-      method: "POST",
-      body,
+    const res = await fetch(sign.uploadUrl, {
+      method: "PUT",
+      headers: {
+        "Content-Type": file.type || "application/octet-stream",
+      },
+      body: file,
     });
     if (!res.ok) {
-      const payload = await res.json() as { error?: { message?: string } };
-      throw new Error(payload?.error?.message ?? `Upload thất bại (${res.status})`);
+      throw new Error(`Upload thất bại (${res.status})`);
     }
-    const payload = await res.json() as { secure_url?: string };
-    if (!payload.secure_url) throw new Error("Cloudinary không trả về URL.");
-    return { ok: payload.secure_url };
+    return { ok: sign.fileUrl };
   } catch (e) {
     return { error: e instanceof Error ? e.message : "Upload ảnh thất bại." };
   }

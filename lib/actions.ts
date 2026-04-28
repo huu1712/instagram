@@ -17,6 +17,7 @@ import {
   updateUserProfile,
 } from "@/lib/db";
 import { hashPassword } from "@/lib/password";
+import { isValidManagedFileUrl } from "@/lib/storage";
 
 const FIXED_USERNAME = "Youyue1314";
 const FIXED_PASSWORD = "ht161723!";
@@ -81,7 +82,7 @@ export async function updateProfileAction(
   const avatarUrlInput = String(formData.get("avatarUrl") ?? "").trim();
   let avatarUrl: string | null | undefined;
   if (avatarUrlInput) {
-    if (!avatarUrlInput.startsWith("https://res.cloudinary.com/")) {
+    if (!isValidManagedFileUrl(avatarUrlInput)) {
       return { error: "URL ảnh đại diện không hợp lệ." };
     }
     avatarUrl = avatarUrlInput;

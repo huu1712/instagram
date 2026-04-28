@@ -15,11 +15,9 @@ type UploadProgress = {
 };
 
 type SignResponse = {
-  cloudName: string;
-  apiKey: string;
-  timestamp: string;
-  folder: string;
-  signature: string;
+  uploadUrl: string;
+  fileUrl: string;
+  objectKey: string;
   error?: string;
 };
 
@@ -29,41 +27,41 @@ function mimeToKind(mime: string): "image" | "video" | null {
   return null;
 }
 
-async function fetchSignature(): Promise<SignResponse> {
-  const res = await fetch("/api/upload/sign");
+async function fetchSignature(file: File): Promise<SignResponse> {
+  const res = await fetch("/api/upload/sign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      fileName: file.name,
+      contentType: file.type || "application/octet-stream",
+    }),
+  });
   if (!res.ok) throw new Error("Không lấy được thông tin upload.");
   return res.json() as Promise<SignResponse>;
 }
 
 function uploadWithProgress(
   url: string,
-  body: FormData,
+  file: File,
+  contentType: string,
   onProgress: (pct: number) => void
-): Promise<{ secure_url: string; resource_type: string }> {
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", url);
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("Content-Type", contentType);
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
     };
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) {
-        try {
-          resolve(JSON.parse(xhr.responseText) as { secure_url: string; resource_type: string });
-        } catch {
-          reject(new Error("Cloudinary trả về dữ liệu không hợp lệ."));
-        }
+        resolve();
       } else {
-        let msg = `Upload thất bại (${xhr.status})`;
-        try {
-          const payload = JSON.parse(xhr.responseText) as { error?: { message?: string } };
-          if (payload?.error?.message) msg = payload.error.message;
-        } catch { /* ignore */ }
-        reject(new Error(msg));
+        reject(new Error(`Upload thất bại (${xhr.status})`));
       }
     };
     xhr.onerror = () => reject(new Error("Lỗi kết nối khi upload."));
-    xhr.send(body);
+    xhr.send(file);
   });
 }
 
@@ -83,32 +81,26 @@ export function useCloudinaryUpload() {
     setUploading(true);
     setProgresses(files.map((f) => ({ name: f.name, percent: 0, done: false })));
 
-    let sign: SignResponse;
-    try {
-      sign = await fetchSignature();
-      if (sign.error) return { error: sign.error };
-    } catch (e) {
-      setUploading(false);
-      return { error: e instanceof Error ? e.message : "Không lấy được chữ ký upload." };
-    }
-
     const results: UploadedMedia[] = [];
 
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
       const kind = mimeToKind(file.type)!;
 
-      const body = new FormData();
-      body.append("file", file);
-      body.append("folder", sign.folder);
-      body.append("timestamp", sign.timestamp);
-      body.append("api_key", sign.apiKey);
-      body.append("signature", sign.signature);
-
-      const uploadUrl = `https://api.cloudinary.com/v1_1/${sign.cloudName}/auto/upload`;
+      let sign: SignResponse;
+      try {
+        sign = await fetchSignature(file);
+        if (sign.error) {
+          setUploading(false);
+          return { error: sign.error };
+        }
+      } catch (e) {
+        setUploading(false);
+        return { error: e instanceof Error ? e.message : "Không lấy được URL upload." };
+      }
 
       try {
-        const payload = await uploadWithProgress(uploadUrl, body, (pct) => {
+        await uploadWithProgress(sign.uploadUrl, file, file.type || "application/octet-stream", (pct) => {
           setProgresses((prev) =>
             prev.map((p, idx) => (idx === i ? { ...p, percent: pct } : p))
           );
@@ -117,8 +109,8 @@ export function useCloudinaryUpload() {
           prev.map((p, idx) => (idx === i ? { ...p, percent: 100, done: true } : p))
         );
         results.push({
-          url: payload.secure_url,
-          kind: payload.resource_type === "image" || kind === "image" ? "image" : "video",
+          url: sign.fileUrl,
+          kind,
         });
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Upload thất bại.";

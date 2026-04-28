@@ -145,7 +145,7 @@ export function EditPostForm({ post }: { post: Post }) {
       {progresses.length > 0 ? (
         <div className="space-y-2 rounded-xl border border-white/10 bg-black/30 p-3">
           <p className="text-xs font-medium text-zinc-400">
-            {uploading ? "Đang upload lên Cloudinary…" : "Upload hoàn tất"}
+            {uploading ? "Đang upload lên R2…" : "Upload hoàn tất"}
           </p>
           {progresses.map((p, i) => (
             <UploadProgressBar key={i} {...p} />

@@ -20,14 +20,16 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 Create `.env.local` from `.env.example` and set:
 
-- `CLOUDINARY_CLOUD_NAME`
-- `CLOUDINARY_API_KEY`
-- `CLOUDINARY_API_SECRET`
-- `CLOUDINARY_FOLDER` (optional)
+- `R2_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET_NAME`
+- `R2_PUBLIC_URL`
+- `R2_PREFIX` (optional)
 - `DATABASE_URL`
 - `AUTH_SECRET`
 
-The app uploads media to Cloudinary and stores users/posts in Postgres, which is required for deploy platforms like Vercel (read-only filesystem).
+The app uploads media to Cloudflare R2 and stores users/posts in Postgres, which is required for deploy platforms like Vercel (read-only filesystem).
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

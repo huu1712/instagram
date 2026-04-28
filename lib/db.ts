@@ -2,7 +2,7 @@ import { existsSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { Pool } from "pg";
-import { deleteFileFromCloudinary } from "@/lib/cloudinary";
+import { deleteManagedFile } from "@/lib/storage";
 
 export type User = {
   id: string;
@@ -267,9 +267,9 @@ export async function updateUserProfile(
 export async function deleteManagedUpload(url: string) {
   if (url.startsWith("http://") || url.startsWith("https://")) {
     try {
-      await deleteFileFromCloudinary(url);
+      await deleteManagedFile(url);
     } catch {
-      // Ignore cloud delete failures to avoid blocking post operations.
+      // Ignore storage delete failures to avoid blocking post operations.
     }
     return;
   }
