@@ -69,6 +69,11 @@ export function PostCard({
     pinFormRef.current?.requestSubmit();
   }
 
+  function markAutoplayIntent() {
+    if (!autoPlayMusic || typeof window === "undefined") return;
+    sessionStorage.setItem("gram-autoplay-intent", post.id);
+  }
+
   useEffect(() => {
     if (!showMusic || !post.music || !autoPlayMusic) return;
     const el = audioRef.current;
@@ -79,13 +84,39 @@ export function PostCard({
     const tryPlay = async () => {
       try {
         await el.play();
-        if (!cancelled) setAwaitingInteraction(false);
+        if (!cancelled) {
+          setAwaitingInteraction(false);
+          if (typeof window !== "undefined") {
+            sessionStorage.removeItem("gram-autoplay-intent");
+          }
+        }
       } catch {
         if (!cancelled) setAwaitingInteraction(true);
       }
     };
 
     void tryPlay();
+
+    const hasIntent =
+      typeof window !== "undefined" &&
+      sessionStorage.getItem("gram-autoplay-intent") === post.id;
+
+    if (hasIntent) {
+      const retryOnPageReady = () => {
+        void tryPlay();
+      };
+
+      window.addEventListener("pageshow", retryOnPageReady);
+      window.addEventListener("focus", retryOnPageReady);
+      document.addEventListener("visibilitychange", retryOnPageReady);
+
+      return () => {
+        cancelled = true;
+        window.removeEventListener("pageshow", retryOnPageReady);
+        window.removeEventListener("focus", retryOnPageReady);
+        document.removeEventListener("visibilitychange", retryOnPageReady);
+      };
+    }
 
     return () => {
       cancelled = true;
@@ -120,7 +151,7 @@ export function PostCard({
   }, [autoPlayMusic, awaitingInteraction, post.music, showMusic]);
 
   return (
-    <li className="overflow-hidden rounded-[1.75rem] border border-white/10 bg-zinc-950/78 shadow-[0_26px_80px_rgba(0,0,0,0.34)] backdrop-blur-xl">
+    <li className="mx-auto w-full max-w-2xl overflow-hidden rounded-[1.75rem] border border-white/10 bg-zinc-950/78 shadow-[0_26px_80px_rgba(0,0,0,0.34)] backdrop-blur-xl">
       <div className="border-b border-white/6 bg-gradient-to-r from-white/[0.05] to-transparent px-4 py-3.5">
         <div className="flex items-start gap-3">
           <div className="relative h-11 w-11 shrink-0 overflow-hidden rounded-2xl bg-zinc-800 ring-1 ring-white/10">
@@ -233,7 +264,7 @@ export function PostCard({
               controls
               autoPlay={autoPlayMusic}
               className="w-full"
-              preload="metadata"
+              preload={autoPlayMusic ? "auto" : "metadata"}
             />
             <p className="mt-2 text-xs text-zinc-400">
               {awaitingInteraction && autoPlayMusic
@@ -251,6 +282,7 @@ export function PostCard({
             <p className="text-xs text-zinc-500">Mở để xem media và nhạc đầy đủ.</p>
             <Link
               href={`/post/${post.id}`}
+              onClick={markAutoplayIntent}
               className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:bg-white/10 hover:text-white"
             >
               Xem chi tiết

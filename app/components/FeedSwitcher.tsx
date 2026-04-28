@@ -16,6 +16,11 @@ export function FeedSwitcher({ items }: { items: FeedItem[] }) {
   const [mode, setMode] = useState<"list" | "grid">("list");
   const [sortByDate, setSortByDate] = useState<"newest" | "oldest">("newest");
 
+  function markAutoplayIntent(postId: string) {
+    if (typeof window === "undefined") return;
+    sessionStorage.setItem("gram-autoplay-intent", postId);
+  }
+
   const sorted = useMemo(
     () =>
       [...items].sort((a, b) => {
@@ -36,13 +41,13 @@ export function FeedSwitcher({ items }: { items: FeedItem[] }) {
             <p className="text-xs text-zinc-500">Bài ghim luôn được giữ ở đầu danh sách.</p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-            <div className="inline-flex rounded-full border border-white/10 bg-white/5 p-1 text-xs">
+            <div className="feed-sort-group inline-flex rounded-full border border-white/10 bg-white/5 p-1 text-xs">
               <button
                 type="button"
                 onClick={() => setSortByDate("newest")}
-                className={`rounded-full px-3.5 py-2 font-medium transition ${
+                className={`feed-sort-chip rounded-full px-3.5 py-2 font-medium transition ${
                   sortByDate === "newest"
-                    ? "bg-white text-zinc-950 shadow-[0_10px_25px_rgba(255,255,255,0.16)]"
+                    ? "feed-sort-chip-active bg-white text-zinc-950 shadow-[0_10px_25px_rgba(255,255,255,0.16)]"
                     : "text-zinc-300 hover:bg-white/8"
                 }`}
               >
@@ -51,9 +56,9 @@ export function FeedSwitcher({ items }: { items: FeedItem[] }) {
               <button
                 type="button"
                 onClick={() => setSortByDate("oldest")}
-                className={`rounded-full px-3.5 py-2 font-medium transition ${
+                className={`feed-sort-chip rounded-full px-3.5 py-2 font-medium transition ${
                   sortByDate === "oldest"
-                    ? "bg-white text-zinc-950 shadow-[0_10px_25px_rgba(255,255,255,0.16)]"
+                    ? "feed-sort-chip-active bg-white text-zinc-950 shadow-[0_10px_25px_rgba(255,255,255,0.16)]"
                     : "text-zinc-300 hover:bg-white/8"
                 }`}
               >
@@ -108,6 +113,7 @@ export function FeedSwitcher({ items }: { items: FeedItem[] }) {
               <li key={item.post.id}>
                 <Link
                   href={`/post/${item.post.id}`}
+                  onClick={() => markAutoplayIntent(item.post.id)}
                   className="group block overflow-hidden rounded-[1.35rem] border border-white/10 bg-zinc-950/85 shadow-[0_22px_60px_rgba(0,0,0,0.24)] transition hover:-translate-y-0.5 hover:border-white/15"
                 >
                   <div className="relative aspect-square w-full bg-black">
