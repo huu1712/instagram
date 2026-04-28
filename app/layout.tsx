@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Gram",
-  description: "Instagram clone — đăng nhập, hồ sơ, bài đăng",
+  title: "Memories",
+  description: "Memories - A place to preserve memories",
   icons: {
     icon: [
       { url: "/favicon.ico", sizes: "any" },

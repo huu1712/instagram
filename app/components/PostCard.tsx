@@ -275,16 +275,16 @@ export function PostCard({
             <audio
               ref={audioRef}
               src={post.music.url}
-              controls
+              controls={!(awaitingInteraction && autoPlayMusic)}
               autoPlay={autoPlayMusic}
-              className="w-full"
+              className={`w-full ${awaitingInteraction && autoPlayMusic ? "pointer-events-none opacity-70" : ""}`}
               preload={autoPlayMusic ? "auto" : "metadata"}
             />
             {awaitingInteraction && autoPlayMusic ? (
               <button
                 type="button"
                 onClick={() => void handleOverlayPlay()}
-                className="absolute inset-0 z-10 flex items-center justify-center rounded-[1.4rem] bg-black/42 backdrop-blur-[2px]"
+                className="absolute inset-0 z-20 flex items-center justify-center rounded-[1.4rem] bg-black/42 backdrop-blur-[2px]"
               >
                 <span className="rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-black/20">
                   Chạm để phát nhạc
