@@ -1,6 +1,15 @@
 import { randomUUID } from "node:crypto";
 import path from "node:path";
-import { S3Client, DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  DeleteObjectCommand,
+  PutObjectCommand,
+  CreateMultipartUploadCommand,
+  UploadPartCommand,
+  CompleteMultipartUploadCommand,
+  AbortMultipartUploadCommand,
+  type CompletedPart,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const R2_ACCOUNT_ID = process.env.R2_ACCOUNT_ID?.trim();
@@ -81,7 +90,8 @@ export async function generatePresignedUpload(fileName: string, contentType: str
       Key: objectKey,
       ContentType: contentType,
     }),
-    { expiresIn: 60 * 5 }
+    // Large files can take longer on unstable networks.
+    { expiresIn: 60 * 30 }
   );
 
   return {
@@ -89,6 +99,103 @@ export async function generatePresignedUpload(fileName: string, contentType: str
     fileUrl: buildPublicFileUrl(objectKey),
     objectKey,
   };
+}
+
+export async function createMultipartUpload(fileName: string, contentType: string) {
+  assertR2Env();
+  const objectKey = buildObjectKey(fileName);
+  const client = getR2Client();
+  const output = await client.send(
+    new CreateMultipartUploadCommand({
+      Bucket: R2_BUCKET_NAME!,
+      Key: objectKey,
+      ContentType: contentType,
+    })
+  );
+
+  if (!output.UploadId) {
+    throw new Error("Không thể khởi tạo multipart upload.");
+  }
+
+  return {
+    objectKey,
+    uploadId: output.UploadId,
+    fileUrl: buildPublicFileUrl(objectKey),
+  };
+}
+
+export async function generateMultipartPartUploadUrl(
+  objectKey: string,
+  uploadId: string,
+  partNumber: number
+) {
+  assertR2Env();
+  if (!objectKey || !uploadId) {
+    throw new Error("Thiếu objectKey hoặc uploadId.");
+  }
+  if (!Number.isInteger(partNumber) || partNumber < 1 || partNumber > 10_000) {
+    throw new Error("partNumber không hợp lệ.");
+  }
+
+  const uploadUrl = await getSignedUrl(
+    getR2Client(),
+    new UploadPartCommand({
+      Bucket: R2_BUCKET_NAME!,
+      Key: objectKey,
+      UploadId: uploadId,
+      PartNumber: partNumber,
+    }),
+    { expiresIn: 60 * 30 }
+  );
+
+  return { uploadUrl };
+}
+
+export async function completeMultipartUpload(params: {
+  objectKey: string;
+  uploadId: string;
+  parts: CompletedPart[];
+}) {
+  const { objectKey, uploadId, parts } = params;
+  assertR2Env();
+
+  if (!objectKey || !uploadId) {
+    throw new Error("Thiếu objectKey hoặc uploadId.");
+  }
+  if (!Array.isArray(parts) || parts.length === 0) {
+    throw new Error("Thiếu danh sách parts để hoàn tất upload.");
+  }
+
+  await getR2Client().send(
+    new CompleteMultipartUploadCommand({
+      Bucket: R2_BUCKET_NAME!,
+      Key: objectKey,
+      UploadId: uploadId,
+      MultipartUpload: {
+        Parts: parts
+          .map((part) => ({ ETag: part.ETag, PartNumber: part.PartNumber }))
+          .filter((part): part is Required<Pick<CompletedPart, "ETag" | "PartNumber">> => {
+            return Boolean(part.ETag && part.PartNumber);
+          }),
+      },
+    })
+  );
+
+  return { fileUrl: buildPublicFileUrl(objectKey) };
+}
+
+export async function abortMultipartUpload(params: { objectKey: string; uploadId: string }) {
+  const { objectKey, uploadId } = params;
+  assertR2Env();
+  if (!objectKey || !uploadId) return;
+
+  await getR2Client().send(
+    new AbortMultipartUploadCommand({
+      Bucket: R2_BUCKET_NAME!,
+      Key: objectKey,
+      UploadId: uploadId,
+    })
+  );
 }
 
 export async function deleteManagedFile(fileUrl: string): Promise<void> {

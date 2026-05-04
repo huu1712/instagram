@@ -40,7 +40,7 @@ Recommended CORS:
 - **Allowed origins**: your site URL(s), e.g. `https://<your-vercel-domain>` (and optionally `http://localhost:3000` for local)
 - **Allowed methods**: `PUT`, `GET`, `HEAD`
 - **Allowed headers**: `*` (or at least `content-type`)
-- **Expose headers**: `ETag` (optional)
+- **Expose headers**: `ETag` (required for multipart upload of large files)
 
 If CORS is not configured, uploads will fail with "Failed to fetch" / "Lỗi kết nối khi upload." even if presigning works.
 
